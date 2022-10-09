@@ -66,6 +66,16 @@ const char *hid_errmsg(hid_t *hid)
     return hid->error.errmsg;
 }
 
+int hid_errno(hid_t *hid)
+{
+    return hid->error.c_errno;
+}
+
+int hid_fd(hid_t *hid)
+{
+    return hid->fd;
+}
+
 hid_t *hid_new(void)
 {
     hid_t *hid = calloc(1, sizeof(hid_t));

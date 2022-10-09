@@ -20,19 +20,30 @@ static struct termios term;
 static tcflag_t old_lflag;
 static cc_t old_vtime;
 
-static int cmd_58g_read_fw(int argc, char *argv[]);
+static hid_t *hid;
+static fd_set fds_read, fds_write;
+
+enum cmd_58g_hid {
+    CMD_NOP,
+    CMD_READFW,
+};
+
+static enum cmd_58g_hid hid_cmd = CMD_NOP;
+
+static int cmd_readfw(int argc, char *argv[]);
 static int cmd_help(int argc, char *argv[]);
 static int cmd_exit(int argc, char *argv[]);
 
 static command_t commands[] = {
-    { "readfw", cmd_58g_read_fw, "Read 5.8g FW version" },
+    { "readfw", cmd_readfw, "Read 5.8g FW version" },
     { "help", cmd_help, "Disply help info" },
     { "exit", cmd_exit, "Quit this menu" }, 
     { NULL, NULL, NULL},
 };
 
-static int cmd_58g_read_fw(int argc, char *argv[])
+static int cmd_readfw(int argc, char *argv[])
 {
+    hid_cmd = CMD_READFW;
     return 0;
 }
 
@@ -141,7 +152,7 @@ int main(void)
     }
 
     if (tcgetattr(STDIN_FILENO, &term) < 0) {
-        perror("tcgetattr");
+        log_error("tcgetattr() fail");
         exit(1);
     }
     old_lflag = term.c_cflag;
@@ -149,24 +160,36 @@ int main(void)
     term.c_cflag &= ~ICANON;
     term.c_cc[VTIME] = 1;
     if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-        perror("tcsetattr");
+        log_error("tcsetattr() fail");
         exit(1);
     }
 
-    rl_callback_handler_install("Myshell$ ", process_line);
+    rl_callback_handler_install("58g_hid$ ", process_line);
 
-    fd_set fds;
+    int max_fd = STDIN_FILENO;
     while(1) {
-        FD_ZERO(&fds);
-        FD_SET(STDIN_FILENO, &fds);
-            
-        if (select(STDIN_FILENO+1, &fds, NULL, NULL, NULL) < 0) {
-            perror("select");
+        FD_ZERO(&fds_read);
+        FD_ZERO(&fds_write);
+        FD_SET(STDIN_FILENO, &fds_read);
+        FD_SET(hid_fd(hid), &fds_read);
+        if (hid_cmd != CMD_NOP)
+            FD_SET(hid_fd(hid), &fds_write);
+
+        if (hid_fd(hid) > max_fd)
+            max_fd = hid_fd(hid);
+
+        if (select(max_fd+1, &fds_read, &fds_write, NULL, NULL) < 0) {
+            log_error("select() fil");
             exit(1);
         }
-
-        if (FD_ISSET(STDIN_FILENO, &fds)) {
+        /* Receive user input */
+        if (FD_ISSET(STDIN_FILENO, &fds_read)) {
             rl_callback_read_char();
+        }
+
+        if (FD_ISSET(hid_fd(hid), &fds_write)) {
+            /* Send data to HID */
+            hid_cmd = CMD_NOP;       
         }
     }
 }

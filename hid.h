@@ -15,5 +15,6 @@ enum serial_error_code {
 hid_t *hid_new(void);
 int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name);
 const char *hid_errmsg(hid_t *hid);
+int hid_fd(hid_t *hid);
 
 #endif
