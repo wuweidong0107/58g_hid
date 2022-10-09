@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <glob.h>
+#include <stdint.h>
+#include <unistd.h>
 
 #include "hid.h"
 #include "log.h"
@@ -134,4 +136,50 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
 
     globfree(&globres);
     return hid->fd != -1 ? 0: _hid_error(hid, ret < 0 ? ret:HID_ERROR_OPEN, ret < 0 ? errno:0, "Fail to open hid device");;
+}
+
+ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
+{
+    ssize_t ret;
+
+    if ((ret = write(hid->fd, buf, len)) < 0) {
+        return _hid_error(hid, HID_ERROR_IO, errno, "Write hid device");
+    }
+
+    return ret;
+}
+
+ssize_t hid_read(hid_t *hid, uint8_t *buf, size_t len, int timeout_ms)
+{
+    ssize_t ret;
+
+    struct timeval tv_timeout;
+    tv_timeout.tv_sec = timeout_ms / 1000;
+    tv_timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+    size_t bytes_read = 0;
+
+    while (bytes_read < len) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(hid->fd, &rfds);
+
+        if ((ret = select(hid->fd+1, &rfds, NULL, NULL, (timeout_ms < 0) ? NULL : &tv_timeout)) < 0)
+            return _hid_error(hid, HID_ERROR_IO, errno, "select() on hid port");
+
+        /* Timeout */
+        if (ret == 0)
+            break;
+
+        if ((ret = read(hid->fd, buf + bytes_read, len - bytes_read)) < 0)
+            return _hid_error(hid, HID_ERROR_IO, errno, "Reading hid port");
+
+        /* Empty read */
+        if (ret == 0 && len != 0)
+            return _hid_error(hid, HID_ERROR_IO, 0, "Reading hid port: unexpected empty read");
+
+        bytes_read += ret;
+    }
+
+    return bytes_read;
 }

@@ -5,9 +5,13 @@
 #include <wordexp.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
 #include "log.h"
 #include "hid.h"
+#include "58g_hid.h"
+
+hid_t *hid[2];
 
 typedef int (*cmd_fn_t)(int argc, char *argv[]);
 typedef struct {
@@ -19,41 +23,16 @@ typedef struct {
 static struct termios term;
 static tcflag_t old_lflag;
 static cc_t old_vtime;
-
-static hid_t *hid;
-static fd_set fds_read, fds_write;
-
-enum cmd_58g_hid {
-    CMD_NOP,
-    CMD_READFW,
-};
-
-static enum cmd_58g_hid hid_cmd = CMD_NOP;
-
-static int cmd_readfw(int argc, char *argv[]);
-static int cmd_help(int argc, char *argv[]);
-static int cmd_exit(int argc, char *argv[]);
-
-static command_t commands[] = {
-    { "readfw", cmd_readfw, "Read 5.8g FW version" },
-    { "help", cmd_help, "Disply help info" },
-    { "exit", cmd_exit, "Quit this menu" }, 
-    { NULL, NULL, NULL},
-};
-
-static int cmd_readfw(int argc, char *argv[])
-{
-    hid_cmd = CMD_READFW;
-    return 0;
-}
+static command_t commands[];
 
 static int cmd_help(int argc, char *argv[])
 {
     int i=0;
     printf("Avaliable command:\n");
     for (; commands[i].name; i++) {
-        printf("%-20s %s\n", commands[i].name, commands[i].doc);
+        printf("\t%-20s %s\n", commands[i].name, commands[i].doc);
     }
+    return 0;
 }
 
 static int cmd_exit(int argc, char *argv[])
@@ -67,6 +46,14 @@ static int cmd_exit(int argc, char *argv[])
     }
     exit(0);
 }
+
+static command_t commands[] = {
+    { "readfw", cmd_read_fw, "Read 5.8g firmware version" },
+    { "readid", cmd_read_id, "Read 5.8g operated ID" },
+    { "help", cmd_help, "Disply help info" },
+    { "exit", cmd_exit, "Quit this menu" }, 
+    { NULL, NULL, NULL},
+};
 
 static command_t *find_command(const char *name)
 {
@@ -140,14 +127,15 @@ int main(void)
 {
     init_logger(NULL, 0);
 
-    hid_t *hid = hid_new();
-    if (hid == NULL) {
+    memset(hid, 0, sizeof(hid));
+    hid[0] = hid_new();
+    if (hid[0] == NULL) {
         log_error("hid_new() fail");
         exit(1);
     }
     
-    if (hid_open(hid, 0x06cb, 0xce44, NULL) != 0) {
-        log_error("hid_open(): %s", hid_errmsg(hid));
+    if (hid_open(hid[0], 0x06cb, 0xce44, NULL) != 0) {
+        log_error("hid_open(): %s", hid_errmsg(hid[0]));
         exit(1);
     }
 
@@ -166,30 +154,20 @@ int main(void)
 
     rl_callback_handler_install("58g_hid$ ", process_line);
 
-    int max_fd = STDIN_FILENO;
+    static fd_set fds_read;
+    int max_fd;
     while(1) {
         FD_ZERO(&fds_read);
-        FD_ZERO(&fds_write);
         FD_SET(STDIN_FILENO, &fds_read);
-        FD_SET(hid_fd(hid), &fds_read);
-        if (hid_cmd != CMD_NOP)
-            FD_SET(hid_fd(hid), &fds_write);
+        max_fd = STDIN_FILENO;
 
-        if (hid_fd(hid) > max_fd)
-            max_fd = hid_fd(hid);
-
-        if (select(max_fd+1, &fds_read, &fds_write, NULL, NULL) < 0) {
-            log_error("select() fil");
+        if (select(max_fd+1, &fds_read, NULL, NULL, NULL) < 0) {
+            log_error("select() fail");
             exit(1);
         }
         /* Receive user input */
         if (FD_ISSET(STDIN_FILENO, &fds_read)) {
             rl_callback_read_char();
-        }
-
-        if (FD_ISSET(hid_fd(hid), &fds_write)) {
-            /* Send data to HID */
-            hid_cmd = CMD_NOP;       
         }
     }
 }

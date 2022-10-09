@@ -2,7 +2,7 @@ TARGET=58g_hid
 
 all: $(TARGET)
 
-$(TARGET): hid.c main.c log.c
+$(TARGET): hid.c main.c log.c 58g_hid.c
 	gcc $^ -o $@ -lreadline
 
 clean:
