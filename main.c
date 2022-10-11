@@ -10,10 +10,7 @@
 
 #include "stdstring.h"
 #include "log.h"
-#include "hid.h"
 #include "menu_58g.h"
-
-hid_t *hid[2];
 
 typedef int (*cmd_fn_t)(int argc, char *argv[]);
 typedef struct {
@@ -50,9 +47,8 @@ static int cmd_exit(int argc, char *argv[])
 }
 
 static command_t commands[] = {
-    { "open <vid> <pid>", cmd_58g_open, "Open 5.8g device" },
-    { "readfw", cmd_58g_read_fw, "Read 5.8g firmware version" },
-    { "readid", cmd_58g_read_id, "Read 5.8g operated ID" },
+    { "readfw [index]", cmd_58g_read_fw, "Read 5.8g firmware version" },
+    { "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { "exit", cmd_exit, "Quit this menu" }, 
     { NULL, NULL, NULL},
@@ -89,6 +85,8 @@ static int shell_exec(int argc, char *argv[])
 
 static void process_line(char *line)
 {
+    int ret;
+
     if (line == NULL) {
         fprintf(stderr, "line is NULL\n");
         term.c_cflag = old_lflag;
@@ -108,8 +106,22 @@ static void process_line(char *line)
 		wordfree(&w);
 		return;
 	}
-    if (shell_exec(w.we_wordc, w.we_wordv))
-        log_error("shell_exec()");
+
+    ret = shell_exec(w.we_wordc, w.we_wordv);
+    switch (ret) {
+        case 0:
+            break;
+        case -ENOENT:            
+            fprintf(stderr, "Unkown command\n\n");
+            cmd_help(0, NULL);
+            break;
+        case -EINVAL:
+            fprintf(stderr, "Invalid command param\n\n");
+            cmd_help(0, NULL);
+            break;
+        default:
+            fprintf(stderr, "Command exec fail\n");
+    }
     wordfree(&w);
     free(line);
 }

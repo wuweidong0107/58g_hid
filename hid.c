@@ -46,7 +46,8 @@ static const char *bus_str(int bus)
 	}
 }
 
-static int _hid_error(hid_t *hid, int code, int c_errno, const char *fmt, ...) {
+static int _hid_error(hid_t *hid, int code, int c_errno, const char *fmt, ...)
+{
     va_list ap;
 
     hid->error.c_errno = c_errno;
