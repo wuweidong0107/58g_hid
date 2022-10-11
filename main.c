@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <readline/readline.h>
 #include <termios.h>
@@ -7,17 +8,18 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
+#include "stdstring.h"
 #include "log.h"
 #include "hid.h"
-#include "58g_hid.h"
+#include "menu_58g.h"
 
 hid_t *hid[2];
 
 typedef int (*cmd_fn_t)(int argc, char *argv[]);
 typedef struct {
-    char *name;
+    const char *name;
     cmd_fn_t func;
-    char *doc;
+    const char *doc;
 } command_t;
 
 static struct termios term;
@@ -41,15 +43,16 @@ static int cmd_exit(int argc, char *argv[])
     term.c_cc[VTIME] = old_vtime;
 
     if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-        perror("tcsetattr");
+        log_error("tcsetattr()");
         exit(1);
     }
     exit(0);
 }
 
 static command_t commands[] = {
-    { "readfw", cmd_read_fw, "Read 5.8g firmware version" },
-    { "readid", cmd_read_id, "Read 5.8g operated ID" },
+    { "open <vid> <pid>", cmd_58g_open, "Open 5.8g device" },
+    { "readfw", cmd_58g_read_fw, "Read 5.8g firmware version" },
+    { "readid", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { "exit", cmd_exit, "Quit this menu" }, 
     { NULL, NULL, NULL},
@@ -58,20 +61,25 @@ static command_t commands[] = {
 static command_t *find_command(const char *name)
 {
     int i;
+
     for (i=0; commands[i].name; i++) {
-        if(strcmp(name, commands[i].name) == 0)
+        char *tokens[2];
+        size_t count;
+        count = string_split(commands[i].name, " ", tokens, 2);
+        if(strcmp(name, tokens[0]) == 0)
             return (&commands[i]);
+        
+        for(int j=0; j<count; j++)
+            free(tokens[j]);
     }
-    for (i=0; commands[i].name; i++) {
-        if(strcmp("help", commands[i].name) == 0)
-            return (&commands[i]);
-    }
+
     return NULL;
 }
 
 static int shell_exec(int argc, char *argv[])
 {
     int i=0;
+
     command_t *cmd = find_command(argv[0]);
     if (cmd) {
         return cmd->func(argc, argv);
@@ -86,7 +94,7 @@ static void process_line(char *line)
         term.c_cflag = old_lflag;
         term.c_cc[VTIME] = old_vtime;
         if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-            perror("tcsetattr");
+            log_error("tcsetattr()");
             exit(1);
         }
         exit(0);
@@ -100,7 +108,8 @@ static void process_line(char *line)
 		wordfree(&w);
 		return;
 	}
-    shell_exec(w.we_wordc, w.we_wordv);
+    if (shell_exec(w.we_wordc, w.we_wordv))
+        log_error("shell_exec()");
     wordfree(&w);
     free(line);
 }
@@ -126,18 +135,6 @@ static int init_logger(const char *log_file, int verbose)
 int main(void)
 {
     init_logger(NULL, 0);
-
-    memset(hid, 0, sizeof(hid));
-    hid[0] = hid_new();
-    if (hid[0] == NULL) {
-        log_error("hid_new() fail");
-        exit(1);
-    }
-    
-    if (hid_open(hid[0], 0x06cb, 0xce44, NULL) != 0) {
-        log_error("hid_open(): %s", hid_errmsg(hid[0]));
-        exit(1);
-    }
 
     if (tcgetattr(STDIN_FILENO, &term) < 0) {
         log_error("tcgetattr() fail");

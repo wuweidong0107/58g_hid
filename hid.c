@@ -12,6 +12,7 @@
 #include <glob.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include "hid.h"
 #include "log.h"
@@ -89,6 +90,11 @@ hid_t *hid_new(void)
     return hid;
 }
 
+void hid_free(hid_t *hid)
+{
+    free(hid);
+}
+
 int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name)
 {
     int fd = -1, ret;
@@ -100,7 +106,7 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
     char buf[256];
     
     if (glob(path, 0, NULL, &globres))
-        return _hid_error(hid, HID_ERROR_OPEN, errno, "Search hid device");
+        return _hid_error(hid, HID_ERROR_OPEN, errno, "Searching hid device");
 
     for(i = 0; i < globres.gl_pathc; i++) {
         fd = open(globres.gl_pathv[i], O_RDWR|O_NONBLOCK);
@@ -135,7 +141,7 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
         hid->fd = fd;
 
     globfree(&globres);
-    return hid->fd != -1 ? 0: _hid_error(hid, ret < 0 ? ret:HID_ERROR_OPEN, ret < 0 ? errno:0, "Fail to open hid device");;
+    return hid->fd != -1 ? 0: _hid_error(hid, ret < 0 ? ret:HID_ERROR_OPEN, ret < 0 ? errno:0, "Openging hid device");;
 }
 
 ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
@@ -143,7 +149,7 @@ ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
     ssize_t ret;
 
     if ((ret = write(hid->fd, buf, len)) < 0) {
-        return _hid_error(hid, HID_ERROR_IO, errno, "Write hid device");
+        return _hid_error(hid, HID_ERROR_IO, errno, "Writing hid device");
     }
 
     return ret;
@@ -172,14 +178,45 @@ ssize_t hid_read(hid_t *hid, uint8_t *buf, size_t len, int timeout_ms)
             break;
 
         if ((ret = read(hid->fd, buf + bytes_read, len - bytes_read)) < 0)
-            return _hid_error(hid, HID_ERROR_IO, errno, "Reading hid port");
+            return _hid_error(hid, HID_ERROR_IO, errno, "Reading hid device");
 
         /* Empty read */
         if (ret == 0 && len != 0)
-            return _hid_error(hid, HID_ERROR_IO, 0, "Reading hid port: unexpected empty read");
+            return _hid_error(hid, HID_ERROR_IO, 0, "Reading hid device: unexpected empty read");
 
         bytes_read += ret;
     }
 
     return bytes_read;
+}
+
+int hid_poll(hid_t *hid, int timeout_ms)
+{
+    struct pollfd fds[1];
+    int ret;
+
+    /* Poll */
+    fds[0].fd = hid->fd;
+    fds[0].events = POLLIN | POLLPRI;
+    if ((ret = poll(fds, 1, timeout_ms)) < 0)
+        return _hid_error(hid, HID_ERROR_IO, errno, "Polling hid device");
+
+    if (ret)
+        return 1;
+
+    /* Timed out */
+    return 0;
+}
+
+int hid_close(hid_t *hid)
+{
+    if (hid->fd < 0)
+        return 0;
+
+    if (close(hid->fd) < 0)
+        return _hid_error(hid, HID_ERROR_CLOSE, errno, "Closing hid device");
+
+    hid->fd = -1;
+
+    return 0;
 }
