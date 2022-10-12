@@ -8,8 +8,10 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-#include "stdstring.h"
 #include "log.h"
+#include "stdstring.h"
+#include "device.h"
+#include "thpool.h"
 #include "menu_58g.h"
 
 typedef int (*cmd_fn_t)(int argc, char *argv[]);
@@ -18,6 +20,8 @@ typedef struct {
     cmd_fn_t func;
     const char *doc;
 } command_t;
+
+threadpool thpool;
 
 static struct termios term;
 static tcflag_t old_lflag;
@@ -126,7 +130,7 @@ static void process_line(char *line)
     free(line);
 }
 
-static int init_logger(const char *log_file, int verbose)
+static int logger_init(const char *log_file, int verbose)
 {
     if (log_file == NULL) {
         log_set_quiet(0);
@@ -146,7 +150,18 @@ static int init_logger(const char *log_file, int verbose)
 
 int main(void)
 {
-    init_logger(NULL, 0);
+    logger_init(NULL, 0);
+
+    if (devices_init() < 0) {
+        log_error("devices_init() fail");
+        exit(1);
+    }
+
+    thpool = thpool_init(4);
+    if (thpool == NULL) {
+        log_error("thpool_init() fail");
+        exit(1);
+    }
 
     if (tcgetattr(STDIN_FILENO, &term) < 0) {
         log_error("tcgetattr() fail");
@@ -179,4 +194,7 @@ int main(void)
             rl_callback_read_char();
         }
     }
+    devices_exit();
+    thpool_wait(thpool);
+	thpool_destroy(thpool);
 }

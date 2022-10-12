@@ -8,8 +8,9 @@ enum aw5808_error_code {
     AW5808_ERROR_OPEN           = -2, /* Opening aw5808 device */
     AW5808_ERROR_QUERY          = -3, /* Querying aw5808 device attributes */
     AW5808_ERROR_CONFIGURE      = -4, /* Configuring aw5808 device attributes */
-    AW5808_ERROR_IO             = -5, /* Reading/writing aw5808 device */
-    AW5808_ERROR_CLOSE          = -6, /* Closing aw5808 device */
+    AW5808_ERROR_IO_SERIAL      = -5, /* Reading/writing aw5808 device via serial */
+    AW5808_ERROR_IO_HID         = -6, /* Reading/writing aw5808 device via hid */
+    AW5808_ERROR_CLOSE          = -7, /* Closing aw5808 device */
 };
 
 typedef struct aw5808_options {
@@ -29,4 +30,5 @@ void aw5808_close(aw5808_t *aw5808);
 /* Error Handling */
 int aw5808_errno(aw5808_t *aw5808);
 const char *aw5808_errmsg(aw5808_t *aw5808);
+
 #endif
