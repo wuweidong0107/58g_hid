@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "aw5808.h"
 #include "hid.h"
@@ -11,6 +12,7 @@ struct aw5808_handle {
     serial_t *serial;
     hid_t *hid;
     int mode;    // USB / I2S
+    pthread_mutex_t mutex;
 
     struct {
         int c_errno;
@@ -73,6 +75,8 @@ aw5808_t *aw5808_new(void)
     if (aw->hid == NULL)
         goto fail;
 
+    pthread_mutex_init(&aw->mutex, NULL);
+
     return aw;
 fail:
     aw5808_free(aw);
@@ -110,9 +114,8 @@ void aw5808_close(aw5808_t *aw)
     serial_close(aw->serial);
 }
 
-int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
+int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len, int timeout_ms)
 {
-    /*
     if (len < 2) {
         return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "Firmware version len too short");
     }
@@ -124,14 +127,24 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
         .data = {0},
     };
     
-    if (hid_write(aw->hid, (uint8_t *) &buf, sizeof(buf)) != sizeof(buf)) {
-        return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "Firmware version len too short");
-        return -1;
+    if (hid_write(aw->hid, (uint8_t *) &pkt, sizeof(pkt)) != sizeof(pkt)) {
+        return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "aw5808 hid writing");
     }
 
-    if (hid_read(aw->hid, (uint8_t *) &buf, sizeof(buf), 10) != sizeof(buf)) {
-        return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "Firmware version len too short");
-        return -1;
+    if (hid_read(aw->hid, (uint8_t *) &pkt, sizeof(pkt), timeout_ms) != sizeof(pkt)) {
+        return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "aw5808 hid reading");
     }
-    */
+    buf[0] = pkt.data[0];
+    buf[1] = pkt.data[1];
+    return 2;
+}
+
+void aw5808_lock(aw5808_t *aw)
+{
+    pthread_mutex_lock(&aw->mutex);
+}
+
+void aw5808_unlock(aw5808_t *aw)
+{
+    pthread_mutex_unlock(&aw->mutex);
 }

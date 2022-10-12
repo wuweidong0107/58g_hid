@@ -23,12 +23,15 @@ typedef struct aw5808_options {
 typedef struct aw5808_handle aw5808_t;
 
 aw5808_t *aw5808_new(void);
-void aw5808_free(aw5808_t *aw5808);
-int aw5808_open(aw5808_t *aw5808, aw5808_options_t *opt);
-void aw5808_close(aw5808_t *aw5808);
+void aw5808_free(aw5808_t *aw);
+int aw5808_open(aw5808_t *aw, aw5808_options_t *opt);
+void aw5808_close(aw5808_t *aw);
+int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len, int timeout_ms);
+void aw5808_lock(aw5808_t *aw);
+void aw5808_unlock(aw5808_t *aw);
 
 /* Error Handling */
-int aw5808_errno(aw5808_t *aw5808);
-const char *aw5808_errmsg(aw5808_t *aw5808);
+int aw5808_errno(aw5808_t *aw);
+const char *aw5808_errmsg(aw5808_t *aw);
 
 #endif

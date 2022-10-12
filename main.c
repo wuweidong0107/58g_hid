@@ -12,7 +12,7 @@
 #include "stdstring.h"
 #include "device.h"
 #include "thpool.h"
-#include "menu_58g.h"
+#include "menu.h"
 
 typedef int (*cmd_fn_t)(int argc, char *argv[]);
 typedef struct {
@@ -51,8 +51,8 @@ static int cmd_exit(int argc, char *argv[])
 }
 
 static command_t commands[] = {
-    { "readfw [index]", cmd_58g_read_fw, "Read 5.8g firmware version" },
-    { "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
+    { "readfw [index]", cmd_58g_readfw, "Read 5.8g firmware version" },
+    //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { "exit", cmd_exit, "Quit this menu" }, 
     { NULL, NULL, NULL},

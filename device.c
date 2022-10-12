@@ -1,19 +1,21 @@
 #include <stdio.h>
+#include "pthread.h"
 #include "device.h"
 #include "log.h"
 
 #define AW5808_MAX_NUM  (8)
 static aw5808_t *aws[AW5808_MAX_NUM];
+static pthread_mutex_t aws_mutex[AW5808_MAX_NUM];
 
 int devices_init(void)
 {
     // TODO: load config
 
     aw5808_options_t opt;
-    opt.serial = "dev/ttyS1";
-    opt.usb_vid = 0x1234;
-    opt.usb_pid = 0x5678;
-    opt.usb_name = "name1";
+    opt.serial = "/dev/ttyS1";
+    opt.usb_vid = 0x25a7;
+    opt.usb_pid = 0x5804;
+    opt.usb_name = NULL;
 
     if ((aws[0] = aw5808_new()) == NULL) {
         log_error("aw5808_new() %s fail\n", opt.usb_name);

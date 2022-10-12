@@ -161,11 +161,6 @@ struct thpool_* thpool_init(int num_threads){
 	return thpool_p;
 }
 
-int thpool_push_task(thpool_* thpool_p, task_t *task)
-{
-    return 0;
-}
-
 /* Add work to the thread pool */
 int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p){
 	job* newjob;

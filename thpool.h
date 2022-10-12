@@ -8,18 +8,6 @@ extern "C" {
 
 /* =================================== API ======================================= */
 
-typedef struct task task_t;
-typedef void (*task_handler_t)(task_t *task);
-
-typedef void (*task_callback_t)(void *user_data);
-
-struct task {
-    task_handler_t handler;
-    void *data;
-    task_callback_t callback;
-    void *cb_data;
-};
-
 typedef struct thpool_* threadpool;
 
 
@@ -70,7 +58,6 @@ threadpool thpool_init(int num_threads);
  * @return 0 on success, -1 otherwise.
  */
 int thpool_add_work(threadpool, void (*function_p)(void*), void* arg_p);
-int thpool_push_task(threadpool, task_t *task);
 
 /**
  * @brief Wait for all queued jobs to finish
