@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <readline/readline.h>
-#include <termios.h>
+#include <readline/history.h>
 #include <unistd.h>
 #include <wordexp.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <ev.h>
 
 #include "log.h"
 #include "stdstring.h"
@@ -22,10 +23,7 @@ typedef struct {
 } command_t;
 
 threadpool thpool;
-
-static struct termios term;
-static tcflag_t old_lflag;
-static cc_t old_vtime;
+static struct ev_loop *loop;
 static command_t commands[];
 
 static int cmd_help(int argc, char *argv[])
@@ -35,26 +33,14 @@ static int cmd_help(int argc, char *argv[])
     for (; commands[i].name; i++) {
         printf("\t%-20s %s\n", commands[i].name, commands[i].doc);
     }
+    printf("Exit by Ctrl+D.\n");
     return 0;
-}
-
-static int cmd_exit(int argc, char *argv[])
-{
-    term.c_cflag = old_lflag;
-    term.c_cc[VTIME] = old_vtime;
-
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-        log_error("tcsetattr()");
-        exit(1);
-    }
-    exit(0);
 }
 
 static command_t commands[] = {
     { "readfw [index]", cmd_58g_readfw, "Read 5.8g firmware version" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
-    { "exit", cmd_exit, "Quit this menu" }, 
     { NULL, NULL, NULL},
 };
 
@@ -92,42 +78,38 @@ static void process_line(char *line)
     int ret;
 
     if (line == NULL) {
-        fprintf(stderr, "line is NULL\n");
-        term.c_cflag = old_lflag;
-        term.c_cc[VTIME] = old_vtime;
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-            log_error("tcsetattr()");
-            exit(1);
+        ev_break(loop, EVBREAK_ALL);
+        rl_callback_handler_remove();
+    } else {
+        if (*line != '\0')
+            add_history(line);
+        wordexp_t w;
+        if (wordexp(line, &w, WRDE_NOCMD))
+            return;
+
+        if (w.we_wordc == 0) {
+            wordfree(&w);
+            return;
         }
-        exit(0);
+
+        ret = shell_exec(w.we_wordc, w.we_wordv);
+        switch (ret) {
+            case 0:
+                break;
+            case -ENOENT:            
+                fprintf(stderr, "Unkown command!\n\n");
+                cmd_help(0, NULL);
+                break;
+            case -EINVAL:
+                fprintf(stderr, "Invalid command param\n\n");
+                cmd_help(0, NULL);
+                break;
+            default:
+                fprintf(stderr, "Command exec fail\n\n");
+        }
+        wordfree(&w);
+        free(line);
     }
-
-    wordexp_t w;
-	if (wordexp(line, &w, WRDE_NOCMD))
-		return;
-
-	if (w.we_wordc == 0) {
-		wordfree(&w);
-		return;
-	}
-
-    ret = shell_exec(w.we_wordc, w.we_wordv);
-    switch (ret) {
-        case 0:
-            break;
-        case -ENOENT:            
-            fprintf(stderr, "Unkown command\n\n");
-            cmd_help(0, NULL);
-            break;
-        case -EINVAL:
-            fprintf(stderr, "Invalid command param\n\n");
-            cmd_help(0, NULL);
-            break;
-        default:
-            fprintf(stderr, "Command exec fail\n");
-    }
-    wordfree(&w);
-    free(line);
 }
 
 static int logger_init(const char *log_file, int verbose)
@@ -148,6 +130,19 @@ static int logger_init(const char *log_file, int verbose)
     return 0;
 }
 
+static void stdin_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+    rl_callback_read_char();
+}
+
+static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
+{
+    if (w->signum == SIGINT) {
+        ev_break(loop, EVBREAK_ALL);
+        log_info("Normal quit\n");
+    }
+}
+
 int main(void)
 {
     logger_init(NULL, 0);
@@ -163,38 +158,22 @@ int main(void)
         exit(1);
     }
 
-    if (tcgetattr(STDIN_FILENO, &term) < 0) {
-        log_error("tcgetattr() fail");
-        exit(1);
-    }
-    old_lflag = term.c_cflag;
-    old_vtime = term.c_cc[VTIME];
-    term.c_cflag &= ~ICANON;
-    term.c_cc[VTIME] = 1;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &term) < 0) {
-        log_error("tcsetattr() fail");
-        exit(1);
-    }
+    fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
+    rl_callback_handler_install("Myshell$ ", (rl_vcpfunc_t*) &process_line);
 
-    rl_callback_handler_install("58g_hid$ ", process_line);
+    // setup libev
+    loop = EV_DEFAULT;
+    ev_io stdin_watcher;
+    ev_io_init(&stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
+    ev_io_start(loop, &stdin_watcher);
+    ev_signal signal_watcher;
+    ev_signal_init(&signal_watcher, signal_cb, SIGINT);
+    ev_signal_start(loop, &signal_watcher);
+    ev_loop(loop, 0);
+    ev_loop_destroy(loop);
 
-    static fd_set fds_read;
-    int max_fd;
-    while(1) {
-        FD_ZERO(&fds_read);
-        FD_SET(STDIN_FILENO, &fds_read);
-        max_fd = STDIN_FILENO;
-
-        if (select(max_fd+1, &fds_read, NULL, NULL, NULL) < 0) {
-            log_error("select() fail");
-            exit(1);
-        }
-        /* Receive user input */
-        if (FD_ISSET(STDIN_FILENO, &fds_read)) {
-            rl_callback_read_char();
-        }
-    }
     devices_exit();
     thpool_wait(thpool);
 	thpool_destroy(thpool);
+    printf("Bye!");
 }
