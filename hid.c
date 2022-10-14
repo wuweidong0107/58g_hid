@@ -16,9 +16,12 @@
 
 #include "hid.h"
 #include "log.h"
+#include "io_channel.h"
 
 struct hid_handle {
     int fd;
+    struct ev_loop * loop;
+    struct io_channel io;
     struct {
         int c_errno;
         char errmsg[256];
@@ -80,20 +83,28 @@ int hid_fd(hid_t *hid)
     return hid->fd;
 }
 
-hid_t *hid_new(void)
+hid_t *hid_new(struct ev_loop *loop)
 {
     hid_t *hid = calloc(1, sizeof(hid_t));
     if (hid == NULL)
         return NULL;
 
     hid->fd = -1;
-
+    hid->loop = loop;
     return hid;
 }
 
 void hid_free(hid_t *hid)
 {
     free(hid);
+}
+
+static void hid_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+}
+
+static void hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
 }
 
 int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name)
@@ -140,6 +151,10 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
 
     if (i < globres.gl_pathc)
         hid->fd = fd;
+
+    ev_io_init(&hid->io.iow, hid_write_cb, hid->fd, EV_WRITE);
+    ev_io_init(&hid->io.ior, hid_read_cb, hid->fd, EV_READ);
+    ev_io_start(hid->loop, &hid->io.ior);
 
     globfree(&globres);
     return hid->fd != -1 ? 0: _hid_error(hid, ret < 0 ? ret:HID_ERROR_OPEN, ret < 0 ? errno:0, "Openging hid device");;
@@ -214,10 +229,18 @@ int hid_close(hid_t *hid)
     if (hid->fd < 0)
         return 0;
 
+    ev_io_stop(hid->loop, &hid->io.ior);
+    ev_io_stop(hid->loop, &hid->io.iow);
+
     if (close(hid->fd) < 0)
         return _hid_error(hid, HID_ERROR_CLOSE, errno, "Closing hid device");
 
     hid->fd = -1;
 
     return 0;
+}
+
+int hid_fd(hid_t *hid)
+{
+    return hid->fd;
 }

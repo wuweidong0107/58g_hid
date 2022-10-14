@@ -23,9 +23,9 @@ typedef struct {
 } command_t;
 
 threadpool thpool;
-static struct ev_loop *loop;
-static command_t commands[];
+struct ev_loop *loop;
 
+static command_t commands[];
 static int cmd_help(int argc, char *argv[])
 {
     int i=0;
@@ -147,11 +147,6 @@ int main(void)
 {
     logger_init(NULL, 0);
 
-    if (devices_init() < 0) {
-        log_error("devices_init() fail");
-        exit(1);
-    }
-
     thpool = thpool_init(4);
     if (thpool == NULL) {
         log_error("thpool_init() fail");
@@ -169,6 +164,12 @@ int main(void)
     ev_signal signal_watcher;
     ev_signal_init(&signal_watcher, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_watcher);
+
+    if (devices_init(loop) < 0) {
+        log_error("devices_init() fail");
+        exit(1);
+    }
+
     ev_loop(loop, 0);
     ev_loop_destroy(loop);
 

@@ -46,7 +46,7 @@ static int _serial_error(serial_t *serial, int code, int c_errno, const char *fm
     return code;
 }
 
-serial_t *serial_new(void) {
+serial_t *serial_new(struct ev_loop *loop) {
     serial_t *serial = calloc(1, sizeof(serial_t));
     if (serial == NULL)
         return NULL;

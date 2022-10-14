@@ -2,6 +2,7 @@
 #define __HID_H__
 
 #include <stdint.h>
+#include <ev.h>
 
 typedef struct hid_handle hid_t;
 
@@ -14,7 +15,7 @@ enum hid_error_code {
     HID_ERROR_CLOSE          = -6, /* Closing hid device */
 };
 
-hid_t *hid_new(void);
+hid_t *hid_new(struct ev_loop *loop);
 int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name);
 int hid_close(hid_t *hid);
 ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len);
@@ -24,4 +25,6 @@ void hid_free(hid_t *hid);
 /* Error Handling */
 const char *hid_errmsg(hid_t *hid);
 int hid_errno(hid_t *hid);
+
+int hid_fd(hid_t *hid);
 #endif

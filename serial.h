@@ -27,7 +27,7 @@ typedef enum serial_parity {
 typedef struct serial_handle serial_t;
 
 /* Primary Functions */
-serial_t *serial_new(void);
+serial_t *serial_new(struct ev_loop *loop);
 int serial_open(serial_t *serial, const char *path, uint32_t baudrate);
 int serial_open_advanced(serial_t *serial, const char *path,
                          uint32_t baudrate, unsigned int databits,

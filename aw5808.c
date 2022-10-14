@@ -61,17 +61,17 @@ int aw5808_errno(aw5808_t *aw)
     return aw->error.c_errno;
 }
 
-aw5808_t *aw5808_new(void)
+aw5808_t *aw5808_new(struct ev_loop *loop)
 {
     aw5808_t *aw = calloc(1, sizeof(aw5808_t));
     if (aw == NULL)
         return NULL;
 
-    aw->serial = serial_new();
+    aw->serial = serial_new(loop);
     if (aw->serial == NULL)
         goto fail;
 
-    aw->hid = hid_new();
+    aw->hid = hid_new(loop);
     if (aw->hid == NULL)
         goto fail;
 
@@ -137,6 +137,16 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len, int timeout_ms)
     buf[0] = pkt.data[0];
     buf[1] = pkt.data[1];
     return 2;
+}
+
+int aw5808_hid_fd(aw5808_t *aw)
+{
+    return hid_fd(aw->hid);
+}
+
+int aw5808_serial_fd(aw5808_t *aw)
+{
+    return serial_fd(aw->serial);
 }
 
 void aw5808_lock(aw5808_t *aw)

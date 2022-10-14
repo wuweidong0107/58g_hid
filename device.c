@@ -1,5 +1,8 @@
 #include <stdio.h>
-#include "pthread.h"
+#include <pthread.h>
+#include <ev.h>
+
+#include "main.h"
 #include "device.h"
 #include "log.h"
 
@@ -7,7 +10,7 @@
 static aw5808_t *aws[AW5808_MAX_NUM];
 static pthread_mutex_t aws_mutex[AW5808_MAX_NUM];
 
-int devices_init(void)
+int devices_init(struct ev_loop *loop)
 {
     // TODO: load config
 
@@ -17,7 +20,7 @@ int devices_init(void)
     opt.usb_pid = 0x5804;
     opt.usb_name = NULL;
 
-    if ((aws[0] = aw5808_new()) == NULL) {
+    if ((aws[0] = aw5808_new(loop)) == NULL) {
         log_error("aw5808_new() %s fail\n", opt.usb_name);
         return -1;
     }
@@ -25,7 +28,7 @@ int devices_init(void)
         log_error("aw5808_open() %s fail: %s", opt.usb_name, aw5808_errmsg(aws[0]));
         return -1;
     }
-
+    
 /*
     opt.serial = "dev/ttyS2";
     opt.usb_vid = 0x1234;
