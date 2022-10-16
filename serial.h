@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <ev.h>
 
 enum serial_error_code {
     SERIAL_ERROR_ARG            = -1, /* Invalid arguments */
@@ -34,7 +35,7 @@ int serial_open_advanced(serial_t *serial, const char *path,
                          serial_parity_t parity, unsigned int stopbits,
                          bool xonxoff, bool rtscts);
 int serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms);
-int serial_write(serial_t *serial, const uint8_t *buf, size_t len);
+ssize_t serial_write(serial_t *serial, const uint8_t *buf, size_t len);
 int serial_flush(serial_t *serial);
 int serial_input_waiting(serial_t *serial, unsigned int *count);
 int serial_output_waiting(serial_t *serial, unsigned int *count);

@@ -10,16 +10,21 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
-
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <ev.h>
 
+#include "log.h"
 #include "serial.h"
+#include "io_channel.h"
+#include "utils.h"
 
 struct serial_handle {
     int fd;
     bool use_termios_timeout;
+    struct ev_loop *loop;
+    struct io_channel io;
 
     struct {
         int c_errno;
@@ -46,13 +51,14 @@ static int _serial_error(serial_t *serial, int code, int c_errno, const char *fm
     return code;
 }
 
-serial_t *serial_new(struct ev_loop *loop) {
+serial_t *serial_new(struct ev_loop *loop)
+{
     serial_t *serial = calloc(1, sizeof(serial_t));
     if (serial == NULL)
         return NULL;
 
     serial->fd = -1;
-
+    serial->loop = loop;
     return serial;
 }
 
@@ -149,7 +155,43 @@ static int _serial_bits_to_baudrate(uint32_t bits) {
     }
 }
 
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate) {
+static void _serial_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+    serial_t *serial = container_of(w, serial_t, io.iow);
+    struct iobuf *wbuf = &serial->io.wbuf;
+    unsigned char *buf = wbuf->buf;
+    size_t len = wbuf->len;
+    ssize_t n;
+    ssize_t remain = len;
+    bool nonblock = fd_is_nonblock(serial->fd);
+
+    do {
+        n = write(serial->fd, buf, remain);
+        if (unlikely(n < 0)) {
+            if (errno == EINTR)
+                continue;
+
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOTCONN)
+                break;
+            
+            log_error("Writing data %s", strerror(errno));
+            return;
+        }
+        remain -= n;
+        iobuf_del(wbuf, 0, (size_t) n);
+    } while (remain && nonblock);
+
+    if (wbuf->len == 0)
+        ev_io_stop(serial->loop, w);
+}
+
+static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+    serial_t *serial = container_of(w, serial_t, io.iow);
+}
+
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate)
+{
     return serial_open_advanced(serial, path, baudrate, 8, PARITY_NONE, 1, false, false);
 }
 
@@ -164,10 +206,8 @@ int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, 
     if (stopbits != 1 && stopbits != 2)
         return _serial_error(serial, SERIAL_ERROR_ARG, 0, "Invalid stop bits (can be 1,2)");
 
-    memset(serial, 0, sizeof(serial_t));
-
     /* Open serial port */
-    if ((serial->fd = open(path, O_RDWR | O_NOCTTY)) < 0)
+    if ((serial->fd = open(path, O_RDWR | O_NONBLOCK)) < 0)
         return _serial_error(serial, SERIAL_ERROR_OPEN, errno, "Opening serial port \"%s\"", path);
 
     memset(&termios_settings, 0, sizeof(termios_settings));
@@ -232,6 +272,9 @@ int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, 
 
     serial->use_termios_timeout = false;
 
+    ev_io_init(&serial->io.iow, _serial_write_cb, serial->fd, EV_WRITE);
+    ev_io_init(&serial->io.ior, _serial_read_cb, serial->fd, EV_READ);
+    ev_io_start(serial->loop, &serial->io.ior);
     return 0;
 }
 
@@ -273,12 +316,14 @@ int serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms) {
     return bytes_read;
 }
 
-int serial_write(serial_t *serial, const uint8_t *buf, size_t len) {
+ssize_t serial_write(serial_t *serial, const uint8_t *buf, size_t len)
+{
     ssize_t ret;
+    struct iobuf *wbuf = &serial->io.wbuf;
+    struct ev_io *iow = &serial->io.iow;
 
-    if ((ret = write(serial->fd, buf, len)) < 0)
-        return _serial_error(serial, SERIAL_ERROR_IO, errno, "Writing serial port");
-
+    ret = iobuf_add(wbuf, wbuf->len, buf, len);
+    ev_io_start(serial->loop, iow);
     return ret;
 }
 
@@ -324,6 +369,9 @@ int serial_poll(serial_t *serial, int timeout_ms) {
 int serial_close(serial_t *serial) {
     if (serial->fd < 0)
         return 0;
+
+    ev_io_stop(serial->loop, &serial->io.ior);
+    ev_io_stop(serial->loop, &serial->io.iow);
 
     if (close(serial->fd) < 0)
         return _serial_error(serial, SERIAL_ERROR_CLOSE, errno, "Closing serial port");
