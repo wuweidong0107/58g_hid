@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -14,7 +13,9 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <ev.h>
+#include <limits.h>
 
+#include "config.h"
 #include "log.h"
 #include "serial.h"
 #include "io_channel.h"
@@ -187,7 +188,41 @@ static void _serial_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 
 static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-    serial_t *serial = container_of(w, serial_t, io.iow);
+    serial_t *serial = container_of(w, serial_t, io.ior);
+    bool nonblock = fd_is_nonblock(serial->fd);
+    struct iobuf *rbuf = &serial->io.rbuf;
+    ssize_t remain = INT_MAX;
+    ssize_t ret;
+
+    do {
+        size_t want;
+        unsigned char *buf = &rbuf->buf[rbuf->len];
+
+        if ((rbuf->cap - rbuf->len) < IO_SIZE &&
+            !iobuf_resize(rbuf, rbuf->cap + IO_SIZE)) {
+            log_error("serial recv buf too small");
+            return;
+        }
+
+        want = rbuf->cap - rbuf->len;
+        if (want > remain)
+            want = remain;
+
+        ret = read(serial->fd, buf, want);
+        if (unlikely(ret < 0)) {
+            perror("read(): ");
+            if (errno == EINTR)
+                continue;
+
+            if (errno == EAGAIN || errno == ENOTCONN)
+                break;
+            return;
+        }
+        if (ret == 0)
+            break;
+        rbuf->len += ret;
+        remain -= ret;
+    } while (remain && nonblock);
 }
 
 int serial_open(serial_t *serial, const char *path, uint32_t baudrate)
