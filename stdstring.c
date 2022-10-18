@@ -74,6 +74,8 @@ char *string_trim(char *s)
 {
     string_trim_right(s);
     string_trim_left(s);
+
+    return s;
 }
 
 int string_split(const char *s, const char *delim, char *parts[], size_t count)

@@ -26,6 +26,7 @@ struct serial_handle {
     bool use_termios_timeout;
     struct ev_loop *loop;
     struct io_channel io;
+    struct serial_cbs *cbs;
 
     struct {
         int c_errno;
@@ -160,7 +161,7 @@ static void _serial_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
     serial_t *serial = container_of(w, serial_t, io.iow);
     struct iobuf *wbuf = &serial->io.wbuf;
-    unsigned char *buf = wbuf->buf;
+    uint8_t *buf = wbuf->buf;
     size_t len = wbuf->len;
     ssize_t n;
     ssize_t remain = len;
@@ -196,7 +197,7 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 
     do {
         size_t want;
-        unsigned char *buf = &rbuf->buf[rbuf->len];
+        uint8_t *buf = &rbuf->buf[rbuf->len];
 
         if ((rbuf->cap - rbuf->len) < IO_SIZE &&
             !iobuf_resize(rbuf, rbuf->cap + IO_SIZE)) {
@@ -210,12 +211,12 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 
         ret = read(serial->fd, buf, want);
         if (unlikely(ret < 0)) {
-            perror("read(): ");
             if (errno == EINTR)
                 continue;
 
             if (errno == EAGAIN || errno == ENOTCONN)
                 break;
+            log_error("serial read: %s", strerror(errno));
             return;
         }
         if (ret == 0)
@@ -223,10 +224,16 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         rbuf->len += ret;
         remain -= ret;
     } while (remain && nonblock);
+
+    if(serial->cbs->on_read) {
+        int len = serial->cbs->on_read(serial, rbuf->buf, rbuf->len);
+        iobuf_del(rbuf, 0, len);
+    }
 }
 
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate)
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs)
 {
+    serial->cbs = cbs;
     return serial_open_advanced(serial, path, baudrate, 8, PARITY_NONE, 1, false, false);
 }
 
@@ -307,6 +314,8 @@ int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, 
 
     serial->use_termios_timeout = false;
 
+    iobuf_init(&serial->io.wbuf, IO_SIZE);
+    iobuf_init(&serial->io.rbuf, IO_SIZE);
     ev_io_init(&serial->io.iow, _serial_write_cb, serial->fd, EV_WRITE);
     ev_io_init(&serial->io.ior, _serial_read_cb, serial->fd, EV_READ);
     ev_io_start(serial->loop, &serial->io.ior);
@@ -746,4 +755,3 @@ int serial_errno(serial_t *serial) {
 int serial_fd(serial_t *serial) {
     return serial->fd;
 }
-

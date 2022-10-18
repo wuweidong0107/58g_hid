@@ -64,8 +64,6 @@ static command_t *find_command(const char *name)
 
 static int shell_exec(int argc, char *argv[])
 {
-    int i=0;
-
     command_t *cmd = find_command(argv[0]);
     if (cmd) {
         return cmd->func(argc, argv);
@@ -105,7 +103,7 @@ static void process_line(char *line)
                 cmd_help(0, NULL);
                 break;
             default:
-                fprintf(stderr, "Command exec fail\n\n");
+                fprintf(stderr, "Command exec fail, ret=%d\n\n", ret);
         }
         wordfree(&w);
         free(line);
@@ -146,7 +144,8 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
 int main(void)
 {
     logger_init(NULL, 0);
-
+    log_info("build time: %s %s\n", __DATE__, __TIME__);
+    
     thpool = thpool_init(4);
     if (thpool == NULL) {
         log_error("thpool_init() fail");
@@ -157,7 +156,7 @@ int main(void)
     rl_callback_handler_install("Myshell$ ", (rl_vcpfunc_t*) &process_line);
 
     // setup libev
-    loop = EV_DEFAULT;
+    loop = ev_loop_new(EVBACKEND_EPOLL);
     ev_io stdin_watcher;
     ev_io_init(&stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
     ev_io_start(loop, &stdin_watcher);
@@ -170,10 +169,10 @@ int main(void)
         exit(1);
     }
 
-    ev_loop(loop, 0);
-    ev_loop_destroy(loop);
+    ev_run(loop, 0);
 
     devices_exit();
+    ev_loop_destroy(loop);
     thpool_wait(thpool);
 	thpool_destroy(thpool);
     printf("Bye!");

@@ -5,14 +5,13 @@
 #include <pthread.h>
 
 #include "aw5808.h"
-#include "hid.h"
-#include "serial.h"
+#include "log.h"
+#include "utils.h"
 
 struct aw5808_handle {
     serial_t *serial;
     hid_t *hid;
     int mode;    // USB / I2S
-    pthread_mutex_t mutex;
 
     struct {
         int c_errno;
@@ -75,8 +74,6 @@ aw5808_t *aw5808_new(struct ev_loop *loop)
     if (aw->hid == NULL)
         goto fail;
 
-    pthread_mutex_init(&aw->mutex, NULL);
-
     return aw;
 fail:
     aw5808_free(aw);
@@ -93,18 +90,38 @@ void aw5808_free(aw5808_t *aw)
         free(aw);
 }
 
-int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
+static int on_serial_read(serial_t *s, const uint8_t *buf, int len)
 {
-    if (serial_open(aw->serial, opt->serial, 57600) !=0) {
-        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw serial %s", opt->serial);
+    printf("-----------------\n");
+    aw5808_t *aw = container_of(&s, aw5808_t, serial);
+    for (int i=0; i<len; i++) {
+        printf("%d:%x\n", i, buf[i]);
+    }
+    return 0;
+}
+
+static struct serial_cbs cbs = {
+    .on_read = on_serial_read,
+};
+
+int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
+{   
+    if (serial_open(aw->serial, opt->serial, 57600, &cbs) !=0) {
+        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
     }
 
-    /* TODO: read mode (USB / I2S) */
-    
-    if (hid_open(aw->hid, opt->usb_vid, opt->usb_pid, opt->usb_name) != 0) {
-        serial_close(aw->serial);
-        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Opening aw hid %s", opt->usb_name);
+    if (aw5808_set_mode(aw, opt->mode)) {
+        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Setting aw5808 mode");
     }
+
+/*
+    if (aw->mode == AW5808_MODE_USB) {
+        if (hid_open(aw->hid, opt->usb_vid, opt->usb_pid, opt->usb_name) != 0) {
+            serial_close(aw->serial);
+            return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Opening aw5808 hid %s", opt->usb_name);
+        }
+    }
+*/
     return 0;
 }
 
@@ -114,7 +131,25 @@ void aw5808_close(aw5808_t *aw)
     serial_close(aw->serial);
 }
 
-int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len, int timeout_ms)
+int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
+{
+    uint8_t buf[] = {0x55, 0xaa, 0x01, 0x54, 0x01, 0x00};
+    size_t len = sizeof(buf) / sizeof(buf[0]);
+
+    if (mode == AW5808_MODE_USB)
+        buf[4] = 1;
+    else if (mode == AW5808_MODE_I2S)
+        buf[4] = 0;
+    else
+        return -1;
+
+    if (serial_write(aw->serial, buf, len) != len)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode");
+
+    return 0;
+}
+
+int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
 {
     if (len < 2) {
         return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "Firmware version len too short");
@@ -130,12 +165,15 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len, int timeout_ms)
     if (hid_write(aw->hid, (uint8_t *) &pkt, sizeof(pkt)) != sizeof(pkt)) {
         return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "aw5808 hid writing");
     }
+    return 0;
 
+/*
     if (hid_read(aw->hid, (uint8_t *) &pkt, sizeof(pkt), timeout_ms) != sizeof(pkt)) {
         return _aw5808_error(aw, AW5808_ERROR_ARG, 0, "aw5808 hid reading");
     }
     buf[0] = pkt.data[0];
     buf[1] = pkt.data[1];
+*/
     return 2;
 }
 
@@ -147,14 +185,4 @@ int aw5808_hid_fd(aw5808_t *aw)
 int aw5808_serial_fd(aw5808_t *aw)
 {
     return serial_fd(aw->serial);
-}
-
-void aw5808_lock(aw5808_t *aw)
-{
-    pthread_mutex_lock(&aw->mutex);
-}
-
-void aw5808_unlock(aw5808_t *aw)
-{
-    pthread_mutex_unlock(&aw->mutex);
 }

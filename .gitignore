@@ -1,3 +1,5 @@
 .vscode*
 58g_hid
 /aw5808
+*.o.d
+*.o

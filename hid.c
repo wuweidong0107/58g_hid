@@ -17,37 +17,18 @@
 #include "hid.h"
 #include "log.h"
 #include "io_channel.h"
+#include "iobuf.h"
+#include "utils.h"
 
 struct hid_handle {
     int fd;
-    struct ev_loop * loop;
+    struct ev_loop *loop;
     struct io_channel io;
     struct {
         int c_errno;
         char errmsg[256];
     } error;
 };
-
-static const char *bus_str(int bus)
-{
-	switch (bus) {
-	case BUS_USB:
-		return "USB";
-		break;
-	case BUS_HIL:
-		return "HIL";
-		break;
-	case BUS_BLUETOOTH:
-		return "Bluetooth";
-		break;
-	case BUS_VIRTUAL:
-		return "Virtual";
-		break;
-	default:
-		return "Other";
-		break;
-	}
-}
 
 static int _hid_error(hid_t *hid, int code, int c_errno, const char *fmt, ...)
 {
@@ -99,17 +80,40 @@ void hid_free(hid_t *hid)
     free(hid);
 }
 
-static void hid_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+static ssize_t _hid_write_sync(hid_t *hid, const uint8_t *buf, size_t len)
 {
+    ssize_t ret;
+
+    if ((ret = write(hid->fd, buf, len)) < 0) {
+        return _hid_error(hid, HID_ERROR_IO, errno, "Writing hid device");
+    }
+
+    return ret;
 }
 
-static void hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+static void _hid_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
+    log_info("");
+    hid_t *hid = container_of(w, hid_t, io.iow);
+    struct iobuf *wbuf = &hid->io.wbuf;
+
+    unsigned char *buf = wbuf->buf;
+    size_t len = wbuf->len;
+    ssize_t n;
+    n = _hid_write_sync(hid, buf, len);
+    if (n > 0)
+        iobuf_del(wbuf, 0, (size_t) n);
+    ev_io_stop(hid->loop, w);
+}
+
+static void _hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+    log_info("");
 }
 
 int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name)
 {
-    int fd = -1, ret;
+    int fd = -1, ret = 0;
     int i;
     struct hidraw_devinfo info;
 
@@ -151,9 +155,9 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
 
     if (i < globres.gl_pathc)
         hid->fd = fd;
-
-    ev_io_init(&hid->io.iow, hid_write_cb, hid->fd, EV_WRITE);
-    ev_io_init(&hid->io.ior, hid_read_cb, hid->fd, EV_READ);
+log_info("hid fd=%d", hid->fd);
+    ev_io_init(&hid->io.iow, _hid_write_cb, hid->fd, EV_WRITE);
+    ev_io_init(&hid->io.ior, _hid_read_cb, hid->fd, EV_READ);
     ev_io_start(hid->loop, &hid->io.ior);
 
     globfree(&globres);
@@ -163,11 +167,12 @@ int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, co
 ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
 {
     ssize_t ret;
+    struct iobuf *wbuf = &hid->io.wbuf;
+    struct ev_io *iow = &hid->io.iow;
 
-    if ((ret = write(hid->fd, buf, len)) < 0) {
-        return _hid_error(hid, HID_ERROR_IO, errno, "Writing hid device");
-    }
-
+    ret = iobuf_add(wbuf, wbuf->len, buf, len);
+    ev_io_start(hid->loop, iow);
+    log_info("");
     return ret;
 }
 
@@ -238,9 +243,4 @@ int hid_close(hid_t *hid)
     hid->fd = -1;
 
     return 0;
-}
-
-int hid_fd(hid_t *hid)
-{
-    return hid->fd;
 }

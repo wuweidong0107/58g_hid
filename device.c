@@ -8,7 +8,6 @@
 
 #define AW5808_MAX_NUM  (8)
 static aw5808_t *aws[AW5808_MAX_NUM];
-static pthread_mutex_t aws_mutex[AW5808_MAX_NUM];
 
 int devices_init(struct ev_loop *loop)
 {
@@ -19,13 +18,14 @@ int devices_init(struct ev_loop *loop)
     opt.usb_vid = 0x25a7;
     opt.usb_pid = 0x5804;
     opt.usb_name = NULL;
+    opt.mode = AW5808_MODE_USB;
 
     if ((aws[0] = aw5808_new(loop)) == NULL) {
-        log_error("aw5808_new() %s fail\n", opt.usb_name);
+        log_error("aw5808_new() fail", opt.usb_name);
         return -1;
     }
     if (aw5808_open(aws[0], &opt) != 0) {
-        log_error("aw5808_open() %s fail: %s", opt.usb_name, aw5808_errmsg(aws[0]));
+        log_error("aw5808_open() fail: %s", aw5808_errmsg(aws[0]));
         return -1;
     }
     
