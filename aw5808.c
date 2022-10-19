@@ -5,12 +5,16 @@
 #include <pthread.h>
 
 #include "aw5808.h"
+#include "codec.h"
 #include "log.h"
 #include "utils.h"
 
 struct aw5808_handle {
     serial_t *serial;
+    const codec_t *codec_serial;
     hid_t *hid;
+    const codec_t *codec_hid;
+
     int mode;    // USB / I2S
 
     struct {
@@ -109,6 +113,10 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
     if (serial_open(aw->serial, opt->serial, 57600, &cbs) !=0) {
         return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
     }
+
+    aw->codec_serial = get_codec("aw5808_serial");
+    if (!aw->codec_serial)
+        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Getting aw5808 serial codec");
 
     if (aw5808_set_mode(aw, opt->mode)) {
         return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Setting aw5808 mode");
