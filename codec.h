@@ -1,6 +1,7 @@
 #ifndef __CODEC_H__
 #define __CODEC_H__
 
+#include <stdio.h>
 #include <stdint.h>
 
 enum {
@@ -18,8 +19,8 @@ struct protocol_head_aw5080_serial {
 typedef struct codec
 {
     const char *ident;
-    ssize_t (*encode)(int8_t *header, size_t data_length);
-    ssize_t (*decode)(const int8_t *header, size_t length, const void **data, size_t *data_length);
+    size_t (*encode)(uint8_t *header, size_t data_length);
+    size_t (*decode)(const uint8_t *header, size_t length, const uint8_t **data, size_t *data_length);
 } codec_t;
 
 const codec_t *get_codec(const char *name);

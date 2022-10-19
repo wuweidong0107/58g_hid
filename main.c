@@ -38,7 +38,8 @@ static int cmd_help(int argc, char *argv[])
 }
 
 static command_t commands[] = {
-    { "readfw [index]", cmd_58g_readfw, "Read 5.8g firmware version" },
+    { "getfw [index]", cmd_aw5808_get_fwver, "Get aw5808 firmware version" },
+    { "setmode [index] <0|1>", cmd_aw5808_set_mode, "Set aw5808 mode (0:usb, 1:i2s)" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -169,6 +170,7 @@ int main(void)
         exit(1);
     }
 
+    menu_init();
     ev_run(loop, 0);
 
     devices_exit();

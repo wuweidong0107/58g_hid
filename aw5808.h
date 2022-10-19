@@ -18,9 +18,14 @@ enum aw5808_error_code {
 };
 
 typedef enum aw5808_mode {
-    AW5808_MODE_USB = 0,
-    AW5808_MODE_I2S = 1,
+    AW5808_MODE_I2S = 0,
+    AW5808_MODE_USB = 1,
 } aw5808_mode_t;
+
+typedef struct aw5808_handle aw5808_t;
+struct aw5808_cbs {
+    void (*on_set_mode)(aw5808_t *aw, const uint8_t *data, int len);
+};
 
 typedef struct aw5808_options {
     const char *serial;
@@ -28,9 +33,8 @@ typedef struct aw5808_options {
     uint16_t usb_pid;
     const char *usb_name;
     aw5808_mode_t mode;
+    struct aw5808_cbs *cbs;
 } aw5808_options_t;
-
-typedef struct aw5808_handle aw5808_t;
 
 aw5808_t *aw5808_new(struct ev_loop *loop);
 void aw5808_free(aw5808_t *aw);
@@ -38,6 +42,8 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt);
 void aw5808_close(aw5808_t *aw);
 int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
+
+void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs);
 
 /* Error Handling */
 int aw5808_errno(aw5808_t *aw);

@@ -16,6 +16,7 @@ struct aw5808_handle {
     const codec_t *codec_hid;
 
     int mode;    // USB / I2S
+    struct aw5808_cbs *cbs;
 
     struct {
         int c_errno;
@@ -23,7 +24,7 @@ struct aw5808_handle {
     } error;
 };
 
-enum hid_58g_rw {
+enum aw5808_58g_rw {
     HID_58G_WRITE = 0x01,
     HID_58G_READ = 0x02,
 };
@@ -94,14 +95,32 @@ void aw5808_free(aw5808_t *aw)
         free(aw);
 }
 
-static int on_serial_read(serial_t *s, const uint8_t *buf, int len)
+static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
 {
-    printf("-----------------\n");
-    aw5808_t *aw = container_of(&s, aw5808_t, serial);
-    for (int i=0; i<len; i++) {
-        printf("%d:%x\n", i, buf[i]);
+    aw5808_t *aw = serial_get_userdata(serial);
+    const codec_t *codec_serial = aw->codec_serial;
+    size_t used = 0;
+	const uint8_t *payload = NULL;
+	size_t payload_len, ret;
+
+    for(;;) {
+        ret = codec_serial->decode(buf, len, &payload, &payload_len);
+        if (!payload)
+            break;
+        used += ret;
+        buf += ret;
+        len -= ret;
+        switch(payload[0]) {
+            case 0xD4:
+                aw->mode = payload[0] == 1 ? AW5808_MODE_I2S:AW5808_MODE_USB;
+                if (aw->cbs->on_set_mode)
+                    aw->cbs->on_set_mode(aw, payload, payload_len);
+                break;
+            default:
+                break;
+        }
     }
-    return 0;
+    return used;
 }
 
 static struct serial_cbs cbs = {
@@ -114,14 +133,13 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
         return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
     }
 
+    serial_set_userdata(aw->serial, aw);
     aw->codec_serial = get_codec("aw5808_serial");
     if (!aw->codec_serial)
         return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Getting aw5808 serial codec");
 
-    if (aw5808_set_mode(aw, opt->mode)) {
-        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Setting aw5808 mode");
-    }
-
+    // if (aw5808_set_mode(aw, opt->mode))
+    //     return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Setting aw5808 mode");
 /*
     if (aw->mode == AW5808_MODE_USB) {
         if (hid_open(aw->hid, opt->usb_vid, opt->usb_pid, opt->usb_name) != 0) {
@@ -144,13 +162,10 @@ int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
     uint8_t buf[] = {0x55, 0xaa, 0x01, 0x54, 0x01, 0x00};
     size_t len = sizeof(buf) / sizeof(buf[0]);
 
-    if (mode == AW5808_MODE_USB)
-        buf[4] = 1;
-    else if (mode == AW5808_MODE_I2S)
-        buf[4] = 0;
-    else
+    if (mode != AW5808_MODE_USB && mode != AW5808_MODE_I2S)
         return -1;
 
+    buf[4] = mode;
     if (serial_write(aw->serial, buf, len) != len)
         return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode");
 
@@ -193,4 +208,9 @@ int aw5808_hid_fd(aw5808_t *aw)
 int aw5808_serial_fd(aw5808_t *aw)
 {
     return serial_fd(aw->serial);
+}
+
+void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs)
+{
+    aw->cbs = cbs;
 }

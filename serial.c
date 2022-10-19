@@ -27,6 +27,7 @@ struct serial_handle {
     struct ev_loop *loop;
     struct io_channel io;
     struct serial_cbs *cbs;
+    void *user_data;
 
     struct {
         int c_errno;
@@ -167,6 +168,7 @@ static void _serial_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
     ssize_t remain = len;
     bool nonblock = fd_is_nonblock(serial->fd);
 
+    iobuf_dump(wbuf, wbuf->len);
     do {
         n = write(serial->fd, buf, remain);
         if (unlikely(n < 0)) {
@@ -754,4 +756,14 @@ int serial_errno(serial_t *serial) {
 
 int serial_fd(serial_t *serial) {
     return serial->fd;
+}
+
+void serial_set_userdata(serial_t *serial, void *userdata)
+{
+    serial->user_data = userdata;
+}
+
+void* serial_get_userdata(serial_t *serial)
+{
+    return serial->user_data;
 }
