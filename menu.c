@@ -44,6 +44,17 @@ static struct aw5808_cbs menu_cbs = {
     .on_set_mode = on_aw5808_set_mode,
 };
 
+int cmd_aw5808_list(int argc, char *argv[])
+{
+    int i;
+    aw5808_t *aw;
+
+    for (i=0; (aw=get_aw5808(i)) !=NULL; i++)
+        printf("%d: %s\n", i, aw5808_id(aw));
+    
+    return 0;
+}
+
 int cmd_aw5808_get_fwver(int argc, char *argv[])
 {
     int index = 0;

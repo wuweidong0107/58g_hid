@@ -31,15 +31,16 @@ static int cmd_help(int argc, char *argv[])
     int i=0;
     printf("Avaliable command:\n");
     for (; commands[i].name; i++) {
-        printf("\t%-20s %s\n", commands[i].name, commands[i].doc);
+        printf("\t%-30s %s\n", commands[i].name, commands[i].doc);
     }
     printf("Exit by Ctrl+D.\n");
     return 0;
 }
 
 static command_t commands[] = {
+    { "list", cmd_aw5808_list, "List all aw5808" },
     { "getfw [index]", cmd_aw5808_get_fwver, "Get aw5808 firmware version" },
-    { "setmode [index] <0|1>", cmd_aw5808_set_mode, "Set aw5808 mode (0:usb, 1:i2s)" },
+    { "setmode [index] <0|1>", cmd_aw5808_set_mode, "Set aw5808 mode(0:i2s, 1:usb)" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -138,7 +139,7 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
 {
     if (w->signum == SIGINT) {
         ev_break(loop, EVBREAK_ALL);
-        log_info("Normal quit\n");
+        rl_callback_handler_remove();
     }
 }
 
@@ -154,7 +155,7 @@ int main(void)
     }
 
     fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
-    rl_callback_handler_install("Myshell$ ", (rl_vcpfunc_t*) &process_line);
+    rl_callback_handler_install("Aw5808$ ", (rl_vcpfunc_t*) &process_line);
 
     // setup libev
     loop = ev_loop_new(EVBACKEND_EPOLL);
@@ -174,8 +175,9 @@ int main(void)
     ev_run(loop, 0);
 
     devices_exit();
+    ev_io_stop(loop, &stdin_watcher);
     ev_loop_destroy(loop);
     thpool_wait(thpool);
 	thpool_destroy(thpool);
-    printf("Bye!");
+    log_info("Bye!");
 }

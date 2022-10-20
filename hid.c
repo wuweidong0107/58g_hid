@@ -13,7 +13,10 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <poll.h>
+#include <limits.h>
 
+#define DEBUG
+#include "config.h"
 #include "hid.h"
 #include "log.h"
 #include "io_channel.h"
@@ -21,6 +24,7 @@
 #include "utils.h"
 
 struct hid_handle {
+    char ident[32];
     int fd;
     struct ev_loop *loop;
     struct io_channel io;
@@ -49,6 +53,11 @@ static int _hid_error(hid_t *hid, int code, int c_errno, const char *fmt, ...)
     return code;
 }
 
+const char* hid_id(hid_t *hid)
+{
+    return hid->ident;
+}
+
 const char *hid_errmsg(hid_t *hid)
 {
     return hid->error.errmsg;
@@ -64,14 +73,13 @@ int hid_fd(hid_t *hid)
     return hid->fd;
 }
 
-hid_t *hid_new(struct ev_loop *loop)
+hid_t *hid_new()
 {
     hid_t *hid = calloc(1, sizeof(hid_t));
     if (hid == NULL)
         return NULL;
 
     hid->fd = -1;
-    hid->loop = loop;
     return hid;
 }
 
@@ -80,88 +88,148 @@ void hid_free(hid_t *hid)
     free(hid);
 }
 
-static ssize_t _hid_write_sync(hid_t *hid, const uint8_t *buf, size_t len)
-{
-    ssize_t ret;
-
-    if ((ret = write(hid->fd, buf, len)) < 0) {
-        return _hid_error(hid, HID_ERROR_IO, errno, "Writing hid device");
-    }
-
-    return ret;
-}
-
 static void _hid_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-    log_info("");
     hid_t *hid = container_of(w, hid_t, io.iow);
     struct iobuf *wbuf = &hid->io.wbuf;
-
-    unsigned char *buf = wbuf->buf;
+    uint8_t *buf = wbuf->buf;
     size_t len = wbuf->len;
     ssize_t n;
-    n = _hid_write_sync(hid, buf, len);
-    if (n > 0)
+    ssize_t remain = len;
+    bool nonblock = fd_is_nonblock(hid->fd);
+
+    iobuf_dump(wbuf, wbuf->len);
+    do {
+        n = write(hid->fd, buf, remain);
+        if (unlikely(n < 0)) {
+            if (errno == EINTR)
+                continue;
+
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOTCONN)
+                break;
+            
+            log_error("Writing data %s", strerror(errno));
+            return;
+        }
+        remain -= n;
         iobuf_del(wbuf, 0, (size_t) n);
-    ev_io_stop(hid->loop, w);
+    } while (remain && nonblock);
+
+    if (wbuf->len == 0)
+        ev_io_stop(hid->loop, w);
 }
 
 static void _hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-    log_info("");
+    hid_t *hid = container_of(w, hid_t, io.ior);
+    bool nonblock = fd_is_nonblock(hid->fd);
+    struct iobuf *rbuf = &hid->io.rbuf;
+    ssize_t remain = INT_MAX;
+    ssize_t ret;
+
+    do {
+        size_t want;
+        uint8_t *buf = &rbuf->buf[rbuf->len];
+
+        if ((rbuf->cap - rbuf->len) < IO_SIZE &&
+            !iobuf_resize(rbuf, rbuf->cap + IO_SIZE)) {
+            log_error("hid recv buf too small");
+            return;
+        }
+
+        want = rbuf->cap - rbuf->len;
+        if (want > remain)
+            want = remain;
+
+        ret = read(hid->fd, buf, want);
+        if (unlikely(ret < 0)) {
+            if (errno == EINTR)
+                continue;
+
+            if (errno == EAGAIN || errno == ENOTCONN)
+                break;
+            log_error("hid read: %s", strerror(errno));
+            return;
+        }
+        if (ret == 0)
+            break;
+        rbuf->len += ret;
+        remain -= ret;
+    } while (remain && nonblock);
+    
+    iobuf_dump(rbuf, rbuf->len);
+/*
+    if(hid->cbs->on_read) {
+        int len = hid->cbs->on_read(hid, rbuf->buf, rbuf->len);
+        iobuf_del(rbuf, 0, len);
+    }
+*/
 }
 
-int hid_open(hid_t *hid, unsigned short vendor_id, unsigned short product_id, const char *name)
+int hid_open(hid_t *hid, const char *dev, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop)
 {
-    int fd = -1, ret = 0;
-    int i;
-    struct hidraw_devinfo info;
+    int fd = -1;
+log_debug("");
 
-    char *path="/dev/hidraw*";
-    glob_t globres;
-    char buf[256];
-    
-    if (glob(path, 0, NULL, &globres))
-        return _hid_error(hid, HID_ERROR_OPEN, errno, "Searching hid device");
+    if (hid->fd != -1)
+        return 0;
+log_debug("");
+    if (dev) {
+        if ((fd = open(dev, O_RDWR|O_NONBLOCK)) < 0)
+            return _hid_error(hid, HID_ERROR_OPEN, errno, "Openging hid device %s", dev);
+        strncpy(hid->ident, dev, sizeof(hid->ident)-1);
+    } else {
+        struct hidraw_devinfo info;
+        char *path="/dev/hidraw*";
+        glob_t globres;
+        char buf[256];
+        int i, ret = 0;
+        
+        if (glob(path, 0, NULL, &globres))
+            return _hid_error(hid, HID_ERROR_OPEN, errno, "Searching hid device %x-%x", vendor_id, product_id);
 
-    for(i = 0; i < globres.gl_pathc; i++) {
-        fd = open(globres.gl_pathv[i], O_RDWR|O_NONBLOCK);
-        if (fd < 0) {
-            ret = -1;
-            continue;
-        }
+        for(i = 0; i < globres.gl_pathc; i++) {
+            fd = open(globres.gl_pathv[i], O_RDWR|O_NONBLOCK);
+            if (fd < 0) {
+                ret = -1;
+                continue;
+            }
 
-        /* Get Raw Name */
-        memset(buf, 0x0, sizeof(buf));
-	    ret = ioctl(fd, HIDIOCGRAWNAME(256), buf);
-        if (ret < 0)
-            continue;
+            /* Get Raw Name */
+            memset(buf, 0x0, sizeof(buf));
+            ret = ioctl(fd, HIDIOCGRAWNAME(256), buf);
+            if (ret < 0)
+                continue;
 
-        /* Get Raw Info */
-        memset(&info, 0x0, sizeof(info));
-        ret = ioctl(fd, HIDIOCGRAWINFO, &info);
-        if (ret < 0)
-            continue;
+            /* Get Raw Info */
+            memset(&info, 0x0, sizeof(info));
+            ret = ioctl(fd, HIDIOCGRAWINFO, &info);
+            if (ret < 0)
+                continue;
 
-        if ((info.vendor & 0xFFFF) == vendor_id && (info.product & 0xFFFF) == product_id) {
-            if (name) {
-                if (!strncmp(buf, name, strlen(name)))
+            if ((info.vendor & 0xFFFF) == vendor_id && (info.product & 0xFFFF) == product_id) {
+                if (name) {
+                    if (!strncmp(buf, name, strlen(name)))
+                        break;
+                } else {
                     break;
+                }
             } else {
-                break;
+                close(fd);
             }
         }
+        if (i >= globres.gl_pathc)
+            return _hid_error(hid, HID_ERROR_OPEN, 0, "Searching hid device %x-%x", vendor_id, product_id);
+        strncpy(hid->ident, globres.gl_pathv[i], sizeof(hid->ident)-1);
+        globfree(&globres);
     }
-
-    if (i < globres.gl_pathc)
-        hid->fd = fd;
-log_info("hid fd=%d", hid->fd);
+    hid->fd = fd;
+    hid->loop = loop;
+    iobuf_init(&hid->io.rbuf, IO_SIZE);
     ev_io_init(&hid->io.iow, _hid_write_cb, hid->fd, EV_WRITE);
     ev_io_init(&hid->io.ior, _hid_read_cb, hid->fd, EV_READ);
     ev_io_start(hid->loop, &hid->io.ior);
-
-    globfree(&globres);
-    return hid->fd != -1 ? 0: _hid_error(hid, ret < 0 ? ret:HID_ERROR_OPEN, ret < 0 ? errno:0, "Openging hid device");;
+    return 0;
 }
 
 ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
@@ -172,7 +240,6 @@ ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len)
 
     ret = iobuf_add(wbuf, wbuf->len, buf, len);
     ev_io_start(hid->loop, iow);
-    log_info("");
     return ret;
 }
 
@@ -241,6 +308,5 @@ int hid_close(hid_t *hid)
         return _hid_error(hid, HID_ERROR_CLOSE, errno, "Closing hid device");
 
     hid->fd = -1;
-
     return 0;
 }

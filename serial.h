@@ -32,8 +32,8 @@ struct serial_cbs {
 };
 
 /* Primary Functions */
-serial_t *serial_new(struct ev_loop *loop);
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs);
+serial_t *serial_new();
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs, struct ev_loop *loop);
 int serial_open_advanced(serial_t *serial, const char *path,
                          uint32_t baudrate, unsigned int databits,
                          serial_parity_t parity, unsigned int stopbits,
@@ -69,6 +69,7 @@ int serial_set_vtime(serial_t *serial, float vtime);
 
 /* Miscellaneous */
 int serial_fd(serial_t *serial);
+const char* serial_id(serial_t *serial);
 int serial_tostring(serial_t *serial, char *str, size_t len);
 void serial_set_userdata(serial_t *serial, void *userdata);
 void* serial_get_userdata(serial_t *serial);

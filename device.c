@@ -15,12 +15,11 @@ int devices_init(struct ev_loop *loop)
 
     aw5808_options_t opt;
     opt.serial = "/dev/ttyS1";
-    opt.usb_vid = 0x25a7;
-    opt.usb_pid = 0x5804;
-    opt.usb_name = NULL;
+    opt.usb_name = "????";
     opt.mode = AW5808_MODE_USB;
+    opt.loop = loop;
 
-    if ((aws[0] = aw5808_new(loop)) == NULL) {
+    if ((aws[0] = aw5808_new()) == NULL) {
         log_error("aw5808_new() fail", opt.usb_name);
         return -1;
     }

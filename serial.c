@@ -22,6 +22,7 @@
 #include "utils.h"
 
 struct serial_handle {
+    char ident[32];
     int fd;
     bool use_termios_timeout;
     struct ev_loop *loop;
@@ -54,14 +55,13 @@ static int _serial_error(serial_t *serial, int code, int c_errno, const char *fm
     return code;
 }
 
-serial_t *serial_new(struct ev_loop *loop)
+serial_t *serial_new()
 {
     serial_t *serial = calloc(1, sizeof(serial_t));
     if (serial == NULL)
         return NULL;
 
     serial->fd = -1;
-    serial->loop = loop;
     return serial;
 }
 
@@ -233,8 +233,10 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
     }
 }
 
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs)
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs, struct ev_loop *loop)
 {
+    strncpy(serial->ident, path, sizeof(serial->ident)-1);
+    serial->loop = loop;
     serial->cbs = cbs;
     return serial_open_advanced(serial, path, baudrate, 8, PARITY_NONE, 1, false, false);
 }
@@ -746,6 +748,9 @@ int serial_tostring(serial_t *serial, char *str, size_t len) {
                     serial->fd, baudrate, databits_str, parity_str, stopbits_str, xonxoff_str, rtscts_str, vmin, vtime);
 }
 
+const char* serial_id(serial_t *serial) {
+    return serial->ident;
+}
 const char *serial_errmsg(serial_t *serial) {
     return serial->error.errmsg;
 }

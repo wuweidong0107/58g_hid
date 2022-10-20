@@ -25,6 +25,7 @@ typedef enum aw5808_mode {
 typedef struct aw5808_handle aw5808_t;
 struct aw5808_cbs {
     void (*on_set_mode)(aw5808_t *aw, const uint8_t *data, int len);
+    void (*on_get_config)(aw5808_t *aw, const uint8_t *data, int len);
 };
 
 typedef struct aw5808_options {
@@ -34,15 +35,18 @@ typedef struct aw5808_options {
     const char *usb_name;
     aw5808_mode_t mode;
     struct aw5808_cbs *cbs;
+    struct ev_loop *loop;
 } aw5808_options_t;
 
-aw5808_t *aw5808_new(struct ev_loop *loop);
+aw5808_t *aw5808_new();
 void aw5808_free(aw5808_t *aw);
 int aw5808_open(aw5808_t *aw, aw5808_options_t *opt);
 void aw5808_close(aw5808_t *aw);
 int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
 
+const char *aw5808_id(aw5808_t *aw);
+const char *aw5808_tostring(aw5808_t *aw);
 void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs);
 
 /* Error Handling */
