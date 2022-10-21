@@ -2,7 +2,6 @@
 #include <pthread.h>
 #include <ev.h>
 
-#include "main.h"
 #include "device.h"
 #include "log.h"
 

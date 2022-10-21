@@ -4,8 +4,8 @@
 #include <ctype.h>
 #include "iobuf.h"
 
-//#define DEBUG
-#ifdef DEBUG
+#define IOBUF_DEBUG
+#ifdef IOBUF_DEBUG
 #define DBG(fmt, args...) do { fprintf(stderr, fmt,  ##args); } while(0)
 #else
 #define DBG(fmt, args...)   do {  } while(0)
@@ -35,7 +35,7 @@ int iobuf_resize(struct iobuf *io, size_t new_size)
         io->buf = NULL;
         io->len = io->cap = 0;
     } else if (new_size != io->cap) {
-        DBG("memory realloc: %ld ---> %ld\n", io->cap, new_size);
+        //DBG("memory realloc: %ld ---> %ld\n", io->cap, new_size);
         void *p = calloc(1, new_size);
         if (p) {
             size_t len = min(new_size, io->len);
@@ -71,7 +71,7 @@ void iobuf_dump(struct iobuf *io, size_t len)
 
     for (i=0; i<len; i++) {
         if (!(i%16))
-            DBG("%4lx  ", i);
+            DBG("%4lx: ", i);
         DBG("%02x ", io->buf[i]);
         
         if (!((i+1) % 8))
@@ -87,9 +87,7 @@ void iobuf_dump(struct iobuf *io, size_t len)
             DBG("\n");
         }
     }
-    // printf("|");
-    // for (i=0; i<len; i++)
-    //     printf("%c ", io->buf[i]);
+    DBG("\n");
 }
 
 size_t iobuf_add(struct iobuf *io, size_t offset, const void *buf,

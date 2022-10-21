@@ -42,6 +42,7 @@ aw5808_t *aw5808_new();
 void aw5808_free(aw5808_t *aw);
 int aw5808_open(aw5808_t *aw, aw5808_options_t *opt);
 void aw5808_close(aw5808_t *aw);
+int aw5808_get_config(aw5808_t *aw);
 int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
 

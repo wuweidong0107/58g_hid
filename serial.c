@@ -226,6 +226,7 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         rbuf->len += ret;
         remain -= ret;
     } while (remain && nonblock);
+    iobuf_dump(rbuf, rbuf->len);
 
     if(serial->cbs->on_read) {
         int len = serial->cbs->on_read(serial, rbuf->buf, rbuf->len);

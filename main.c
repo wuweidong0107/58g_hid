@@ -10,79 +10,22 @@
 #include <ev.h>
 
 #include "log.h"
-#include "stdstring.h"
 #include "device.h"
 #include "thpool.h"
 #include "menu.h"
 
-typedef int (*cmd_fn_t)(int argc, char *argv[]);
-typedef struct {
-    const char *name;
-    cmd_fn_t func;
-    const char *doc;
-} command_t;
-
 threadpool thpool;
 struct ev_loop *loop;
 
-static command_t commands[];
-static int cmd_help(int argc, char *argv[])
-{
-    int i=0;
-    printf("Avaliable command:\n");
-    for (; commands[i].name; i++) {
-        printf("\t%-30s %s\n", commands[i].name, commands[i].doc);
-    }
-    printf("Exit by Ctrl+D.\n");
-    return 0;
-}
-
-static command_t commands[] = {
-    { "list", cmd_aw5808_list, "List all aw5808" },
-    { "getfw [index]", cmd_aw5808_get_fwver, "Get aw5808 firmware version" },
-    { "setmode [index] <0|1>", cmd_aw5808_set_mode, "Set aw5808 mode(0:i2s, 1:usb)" },
-    //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
-    { "help", cmd_help, "Disply help info" },
-    { NULL, NULL, NULL},
-};
-
-static command_t *find_command(const char *name)
-{
-    int i;
-
-    for (i=0; commands[i].name; i++) {
-        char *tokens[2];
-        size_t count;
-        count = string_split(commands[i].name, " ", tokens, 2);
-        if(strcmp(name, tokens[0]) == 0)
-            return (&commands[i]);
-        
-        for(int j=0; j<count; j++)
-            free(tokens[j]);
-    }
-
-    return NULL;
-}
-
-static int shell_exec(int argc, char *argv[])
-{
-    command_t *cmd = find_command(argv[0]);
-    if (cmd) {
-        return cmd->func(argc, argv);
-    }
-    return -ENOENT;
-}
-
 static void process_line(char *line)
 {
-    int ret;
-
     if (line == NULL) {
         ev_break(loop, EVBREAK_ALL);
         rl_callback_handler_remove();
     } else {
         if (*line != '\0')
             add_history(line);
+        
         wordexp_t w;
         if (wordexp(line, &w, WRDE_NOCMD))
             return;
@@ -91,22 +34,8 @@ static void process_line(char *line)
             wordfree(&w);
             return;
         }
-
-        ret = shell_exec(w.we_wordc, w.we_wordv);
-        switch (ret) {
-            case 0:
-                break;
-            case -ENOENT:            
-                fprintf(stderr, "Unkown command!\n\n");
-                cmd_help(0, NULL);
-                break;
-            case -EINVAL:
-                fprintf(stderr, "Invalid command param\n\n");
-                cmd_help(0, NULL);
-                break;
-            default:
-                fprintf(stderr, "Command exec fail, ret=%d\n\n", ret);
-        }
+        
+        shell_exec(w.we_wordc, w.we_wordv);
         wordfree(&w);
         free(line);
     }
@@ -154,9 +83,6 @@ int main(void)
         exit(1);
     }
 
-    fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
-    rl_callback_handler_install("Aw5808$ ", (rl_vcpfunc_t*) &process_line);
-
     // setup libev
     loop = ev_loop_new(EVBACKEND_EPOLL);
     ev_io stdin_watcher;
@@ -172,6 +98,9 @@ int main(void)
     }
 
     menu_init();
+    fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
+    rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
+    shell_set_prompt(PROMPT_ON);
     ev_run(loop, 0);
 
     devices_exit();

@@ -142,7 +142,6 @@ static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
     size_t used = 0;
 	const uint8_t *payload = NULL;
 	size_t payload_len, ret;
-    int new_mode;
 
     for(;;) {
         ret = codec_serial->decode(buf, len, &payload, &payload_len);
@@ -152,7 +151,13 @@ static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
         buf += ret;
         len -= ret;
         switch(payload[0]) {
+            case 0xD0:
+                if (aw->cbs->on_get_config)
+                    aw->cbs->on_get_config(aw, payload, payload_len);
+                break;
             case 0xD4:
+                if (payload[4] == AW5808_MODE_USB)
+                    hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, NULL /* 根据所插入的 USB 口来判断*/, aw->loop);
                 if (aw->cbs->on_set_mode)
                     aw->cbs->on_set_mode(aw, payload, payload_len);
                 break;

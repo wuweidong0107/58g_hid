@@ -169,11 +169,11 @@ static void _hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 int hid_open(hid_t *hid, const char *dev, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop)
 {
     int fd = -1;
-log_debug("");
+log_warn("");
 
     if (hid->fd != -1)
         return 0;
-log_debug("");
+log_warn("");
     if (dev) {
         if ((fd = open(dev, O_RDWR|O_NONBLOCK)) < 0)
             return _hid_error(hid, HID_ERROR_OPEN, errno, "Openging hid device %s", dev);
