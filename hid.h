@@ -16,7 +16,7 @@ enum hid_error_code {
 };
 
 hid_t *hid_new();
-int hid_open(hid_t *hid, const char *dev, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop);
+int hid_open(hid_t *hid, const char *path, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop);
 int hid_close(hid_t *hid);
 ssize_t hid_write(hid_t *hid, const uint8_t *buf, size_t len);
 ssize_t hid_read(hid_t *hid, uint8_t *buf, size_t len, int timeout_ms);

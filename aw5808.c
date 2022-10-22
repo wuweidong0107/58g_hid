@@ -12,8 +12,25 @@
 #include "utils.h"
 #include "io_channel.h"
 
+enum aw5808_usbid {
+    AW5808_USB_VID = 0x25a7,
+    AW5808_USB_PID = 0x5804,
+};
+
+enum aw5808_58g_rw {
+    HID_58G_WRITE = 0x01,
+    HID_58G_READ = 0x02,
+};
+
+typedef struct {
+    uint8_t rw;     // 1: write, 2: read
+    uint8_t reg;    // reg address
+    uint8_t len;    // data length
+    uint8_t data[61];
+} __attribute__((packed)) hid_packet_t;
+
 struct aw5808_handle {
-    char ident[32];
+    char ident[64];
 
     struct ev_loop *loop;
     serial_t *serial;
@@ -34,23 +51,6 @@ struct aw5808_handle {
         char errmsg[96];
     } error;
 };
-
-enum aw5808_usbid {
-    AW5808_USB_VID = 0x25a7,
-    AW5808_USB_PID = 0x5804,
-};
-
-enum aw5808_58g_rw {
-    HID_58G_WRITE = 0x01,
-    HID_58G_READ = 0x02,
-};
-
-typedef struct {
-    uint8_t rw;     // 1: write, 2: read
-    uint8_t reg;    // reg address
-    uint8_t len;    // data length
-    uint8_t data[61];
-} __attribute__((packed)) hid_packet_t;
 
 static int _aw5808_error(aw5808_t *aw, int code, int c_errno, const char *fmt, ...)
 {
@@ -77,12 +77,24 @@ static void _aw5808_udev_read_cb(struct ev_loop *loop, struct ev_io *w, int reve
     struct udev_device *dev;
     log_debug("");
     dev = udev_monitor_receive_device(aw->mon);
-    if (dev && (strstr(udev_device_get_devpath(dev), "25A7:5804") != NULL)) {
-        log_debug("");
-        if (!strcmp(udev_device_get_action(dev), "add")) {
-            hid_open(aw->hid, udev_device_get_devnode(dev), 0, 0, NULL, aw->loop);
-        } else if (!strcmp(udev_device_get_action(dev), "remove")) {
-            hid_close(aw->hid);
+    if (dev) {
+#if 1
+        printf("Subsystem=%s\n", udev_device_get_subsystem(dev));
+        printf("ACTION=%s\n", udev_device_get_action(dev));
+        printf("DEVNAME=%s\n", udev_device_get_sysname(dev));
+        printf("DEVPATH=%s\n", udev_device_get_devpath(dev));
+        printf("MACADDR=%s\n", udev_device_get_sysattr_value(dev, "address"));
+        printf("DEVNODE=%s\n", udev_device_get_devnode(dev));
+#endif
+        if (strstr(udev_device_get_devpath(dev), "25A7:5804") != NULL) {
+            if (!strcmp(udev_device_get_action(dev), "add")) {
+                if(hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop) != 0)
+                    log_error("Opening hid in udev");
+                aw->mode = AW5808_MODE_USB;
+            } else if (!strcmp(udev_device_get_action(dev), "remove")) {
+                hid_close(aw->hid);
+                aw->mode = AW5808_MODE_I2S;
+            }
         }
         udev_device_unref(dev);
     }
@@ -135,7 +147,7 @@ void aw5808_free(aw5808_t *aw)
         free(aw);
 }
 
-static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
+static int on_serial_read(serial_t *serial, const uint8_t *buf, size_t len)
 {
     aw5808_t *aw = serial_get_userdata(serial);
     const codec_t *codec_serial = aw->codec_serial;
@@ -147,6 +159,19 @@ static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
         ret = codec_serial->decode(buf, len, &payload, &payload_len);
         if (!payload)
             break;
+#if 1
+        int i;
+        printf("----------buf_len=%ld\n", len);
+        for(i=0; i<len; i++) {
+            printf("%02x ", buf[i]);
+        }
+        printf("\n----------payload_len=%ld\n", payload_len);
+        for(i=0; i<payload_len; i++) {
+            printf("%02x ", payload[i]);
+        }
+        printf("\n");
+#endif
+
         used += ret;
         buf += ret;
         len -= ret;
@@ -156,10 +181,8 @@ static int on_serial_read(serial_t *serial, const uint8_t *buf, int len)
                     aw->cbs->on_get_config(aw, payload, payload_len);
                 break;
             case 0xD4:
-                if (payload[4] == AW5808_MODE_USB)
-                    hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, NULL /* 根据所插入的 USB 口来判断*/, aw->loop);
-                if (aw->cbs->on_set_mode)
-                    aw->cbs->on_set_mode(aw, payload, payload_len);
+                if (aw->cbs->on_set_mode && payload_len == 0x02)
+                    aw->cbs->on_set_mode(aw, payload[1]);
                 break;
             default:
                 break;
@@ -174,25 +197,38 @@ static struct serial_cbs cbs = {
 
 int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 {   
-    if (serial_open(aw->serial, opt->serial, 57600, &cbs, opt->loop) !=0) {
-        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
+    if(!opt->serial && !opt->usb)
+        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "No serial or usb specifed", opt->serial);
+
+    if (opt->serial) {
+        if (serial_open(aw->serial, opt->serial, 57600, &cbs, opt->loop) !=0) {
+            return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
+        }
+
+        serial_set_userdata(aw->serial, aw);
+        aw->codec_serial = get_codec("aw5808_serial");
+        if (!aw->codec_serial)
+            return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 get serial codec");
+
+        if(aw5808_set_mode_sync(aw, opt->mode, 100))
+            return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 set mode");
     }
 
-    serial_set_userdata(aw->serial, aw);
-    aw->codec_serial = get_codec("aw5808_serial");
-    if (!aw->codec_serial)
-        return _aw5808_error(aw, AW5808_ERROR_OPEN, 0, "Getting aw5808 serial codec");
-
-    if (opt->usb_name)
-        strncpy(aw->usb_name, opt->usb_name, sizeof(aw->usb_name)-1);
-
-    aw->mon = udev_monitor_new_from_netlink(aw->udev, "udev");
-	udev_monitor_filter_add_match_subsystem_devtype(aw->mon, "hidraw", NULL);
-	udev_monitor_enable_receiving(aw->mon);
-	aw->udev_fd = udev_monitor_get_fd(aw->mon);
-    aw->loop = opt->loop;
-    ev_io_init(&aw->udev_io.ior, _aw5808_udev_read_cb, aw->udev_fd, EV_READ);
-    ev_io_start(aw->loop, &aw->udev_io.ior);
+    if (opt->usb) {
+        strncpy(aw->usb_name, opt->usb, sizeof(aw->usb_name)-1);
+        aw->mon = udev_monitor_new_from_netlink(aw->udev, "udev");
+        udev_monitor_filter_add_match_subsystem_devtype(aw->mon, "hidraw", NULL);
+        udev_monitor_enable_receiving(aw->mon);
+        aw->udev_fd = udev_monitor_get_fd(aw->mon);
+        aw->loop = opt->loop;
+        ev_io_init(&aw->udev_io.ior, _aw5808_udev_read_cb, aw->udev_fd, EV_READ);
+        ev_io_start(aw->loop, &aw->udev_io.ior);
+    
+        /* if fail as hid not ready yet, will reopen it at udev callback. */
+        if (hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop))
+            log_warn("hid not ready yet");
+    }
+    
     return 0;
 }
 
@@ -213,17 +249,49 @@ int aw5808_get_config(aw5808_t *aw)
     return 0;
 }
 
+int aw5808_set_mode_sync(aw5808_t *aw, aw5808_mode_t mode, int timeout_us)
+{
+    uint8_t buf[] = {0x55, 0xaa, 0x01, 0x54, 0x00, 0x00};
+    size_t len = sizeof(buf) / sizeof(buf[0]);
+
+    if (!aw->serial)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Not support serial");
+
+    buf[4] = mode;
+    if (serial_write_sync(aw->serial, buf, len) != len)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode write request");
+
+    if (serial_read(aw->serial, buf, len, timeout_us) != len)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode but no reply");
+
+    if (buf[4] != mode)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode not work");
+
+    aw->mode = mode;
+    return 0;
+}
+
 int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
 {
     uint8_t buf[] = {0x55, 0xaa, 0x01, 0x54, 0x01, 0x00};
     size_t len = sizeof(buf) / sizeof(buf[0]);
 
-    if (mode != AW5808_MODE_USB && mode != AW5808_MODE_I2S)
-        return -1;
+    if (!aw->serial)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Not support serial");
 
-    buf[4] = mode;
-    if (mode == AW5808_MODE_I2S && aw->mode == AW5808_MODE_USB)
+    if (mode != AW5808_MODE_USB && mode != AW5808_MODE_I2S)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Invalid mode");
+
+    if (mode == aw->mode) {
+        aw->cbs->on_set_mode(aw, mode);
+        return 0;
+    }
+    
+    if (mode == AW5808_MODE_I2S && aw->mode == AW5808_MODE_USB) {
         hid_close(aw->hid);
+    }
+    
+    buf[4] = mode;
     if (serial_write(aw->serial, buf, len) != len)
         return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting mode");
 
@@ -249,6 +317,11 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
     return 0;
 }
 
+int aw5808_mode(aw5808_t *aw)
+{
+    return aw->mode;
+}
+
 int aw5808_hid_fd(aw5808_t *aw)
 {
     return hid_fd(aw->hid);
@@ -261,7 +334,7 @@ int aw5808_serial_fd(aw5808_t *aw)
 
 const char *aw5808_id(aw5808_t *aw)
 {
-    snprintf(aw->ident, sizeof(aw->ident), "%s %s", serial_id(aw->serial), hid_id(aw->hid));
+    snprintf(aw->ident, sizeof(aw->ident)-1, "%s %s", serial_id(aw->serial), hid_id(aw->hid));
     return aw->ident;
 }
 

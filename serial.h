@@ -28,7 +28,7 @@ typedef enum serial_parity {
 typedef struct serial_handle serial_t;
 
 struct serial_cbs {
-    int (*on_read)(serial_t *serial, const uint8_t *buf, int len);
+    int (*on_read)(serial_t *serial, const uint8_t *buf, size_t len);
 };
 
 /* Primary Functions */
@@ -40,6 +40,7 @@ int serial_open_advanced(serial_t *serial, const char *path,
                          bool xonxoff, bool rtscts);
 int serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms);
 ssize_t serial_write(serial_t *serial, const uint8_t *buf, size_t len);
+ssize_t serial_write_sync(serial_t *serial, const uint8_t *buf, size_t len);
 int serial_flush(serial_t *serial);
 int serial_input_waiting(serial_t *serial, unsigned int *count);
 int serial_output_waiting(serial_t *serial, unsigned int *count);

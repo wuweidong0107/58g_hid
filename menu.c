@@ -42,7 +42,7 @@ static int cmd_help(int argc, char *argv[])
 static command_t commands[] = {
     { "list", cmd_aw5808_list, "List all aw5808" },
     { "getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
-    { "setmode [index] <0|1>", cmd_aw5808_set_mode, "Set aw5808 mode(0:i2s, 1:usb)" },
+    { "setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -136,17 +136,17 @@ void on_aw5808_get_config(aw5808_t *aw, const uint8_t *data, int len)
     shell_printf("RF Power: %d\n", data[6]);    
 }
 
-void on_aw5808_set_mode(aw5808_t *aw, const uint8_t *data, int len)
+void on_aw5808_set_mode(aw5808_t *aw, const int mode)
 {
-    switch(data[1]) {
+    switch(mode) {
         case AW5808_MODE_I2S:
-            shell_printf("set i2s mode ok.\n");
+            shell_printf("mode is i2s.\n");
             break;
         case AW5808_MODE_USB:
-            shell_printf("set usb mode ok.\n");
+            shell_printf("mode is usb.\n");
             break;
         default:
-            fprintf(stderr, "unknown mode(%x).\n", data[1]);
+            fprintf(stderr, "unknown mode(%x).\n", mode);
     }
 }
 
@@ -196,19 +196,24 @@ int cmd_aw5808_get_fwver(int argc, char *argv[])
 int cmd_aw5808_set_mode(int argc, char *argv[])
 {
     int index, mode;
-    if (argc == 2) {
+    if (argc == 2)
         index = 0;
-        mode = strtoul(argv[1], NULL, 10);
-    } else if (argc == 3) {
+    else if (argc == 3)
         index = strtoul(argv[1], NULL, 10);
-        mode = strtoul(argv[2], NULL, 10);
-    } else {
+    else
         return -1;
-    }
-
+    
+    if(!strncasecmp("i2s", argv[argc-1], 3))
+        mode = AW5808_MODE_I2S;
+    else if(!strncasecmp("usb", argv[argc-1], 3))
+        mode = AW5808_MODE_USB;
+    else
+        return -1;
+    
     aw5808_t *aw = get_aw5808(index);
     if (aw == NULL)
         return -1;
+
     return aw5808_set_mode(aw, mode);
 }
 

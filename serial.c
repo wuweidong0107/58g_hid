@@ -22,7 +22,7 @@
 #include "utils.h"
 
 struct serial_handle {
-    char ident[32];
+    char ident[64];
     int fd;
     bool use_termios_timeout;
     struct ev_loop *loop;
@@ -32,7 +32,7 @@ struct serial_handle {
 
     struct {
         int c_errno;
-        char errmsg[96];
+        char errmsg[256];
     } error;
 };
 
@@ -226,7 +226,6 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         rbuf->len += ret;
         remain -= ret;
     } while (remain && nonblock);
-    iobuf_dump(rbuf, rbuf->len);
 
     if(serial->cbs->on_read) {
         int len = serial->cbs->on_read(serial, rbuf->buf, rbuf->len);
@@ -373,6 +372,16 @@ ssize_t serial_write(serial_t *serial, const uint8_t *buf, size_t len)
 
     ret = iobuf_add(wbuf, wbuf->len, buf, len);
     ev_io_start(serial->loop, iow);
+    return ret;
+}
+
+ssize_t serial_write_sync(serial_t *serial, const uint8_t *buf, size_t len)
+{
+    ssize_t ret;
+
+    if ((ret = write(serial->fd, buf, len)) < 0)
+        return _serial_error(serial, SERIAL_ERROR_IO, errno, "Writing serial port");
+
     return ret;
 }
 

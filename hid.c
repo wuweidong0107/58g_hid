@@ -24,7 +24,7 @@
 #include "utils.h"
 
 struct hid_handle {
-    char ident[32];
+    char ident[64];
     int fd;
     struct ev_loop *loop;
     struct io_channel io;
@@ -98,7 +98,7 @@ static void _hid_write_cb(struct ev_loop *loop, struct ev_io *w, int revents)
     ssize_t remain = len;
     bool nonblock = fd_is_nonblock(hid->fd);
 
-    iobuf_dump(wbuf, wbuf->len);
+    //iobuf_dump(wbuf, wbuf->len);
     do {
         n = write(hid->fd, buf, remain);
         if (unlikely(n < 0)) {
@@ -157,7 +157,7 @@ static void _hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         remain -= ret;
     } while (remain && nonblock);
     
-    iobuf_dump(rbuf, rbuf->len);
+    //iobuf_dump(rbuf, rbuf->len);
 /*
     if(hid->cbs->on_read) {
         int len = hid->cbs->on_read(hid, rbuf->buf, rbuf->len);
@@ -166,26 +166,25 @@ static void _hid_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 */
 }
 
-int hid_open(hid_t *hid, const char *dev, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop)
+int hid_open(hid_t *hid, const char *path, uint16_t vendor_id, uint16_t product_id, const char *name, struct ev_loop *loop)
 {
     int fd = -1;
-log_warn("");
 
     if (hid->fd != -1)
         return 0;
-log_warn("");
-    if (dev) {
-        if ((fd = open(dev, O_RDWR|O_NONBLOCK)) < 0)
-            return _hid_error(hid, HID_ERROR_OPEN, errno, "Openging hid device %s", dev);
-        strncpy(hid->ident, dev, sizeof(hid->ident)-1);
+
+    if (path) {
+        if ((fd = open(path, O_RDWR|O_NONBLOCK)) < 0)
+            return _hid_error(hid, HID_ERROR_OPEN, errno, "Openging hid device %s", path);
+        snprintf(hid->ident, sizeof(hid->ident)-1, "%s %s", path, name);
     } else {
         struct hidraw_devinfo info;
-        char *path="/dev/hidraw*";
+        char *path2="/dev/hidraw*";
         glob_t globres;
-        char buf[256];
+        char buf[32];
         int i, ret = 0;
         
-        if (glob(path, 0, NULL, &globres))
+        if (glob(path2, 0, NULL, &globres))
             return _hid_error(hid, HID_ERROR_OPEN, errno, "Searching hid device %x-%x", vendor_id, product_id);
 
         for(i = 0; i < globres.gl_pathc; i++) {
@@ -195,13 +194,11 @@ log_warn("");
                 continue;
             }
 
-            /* Get Raw Name */
             memset(buf, 0x0, sizeof(buf));
-            ret = ioctl(fd, HIDIOCGRAWNAME(256), buf);
+            ret = ioctl(fd, HIDIOCGRAWPHYS(256), buf);
             if (ret < 0)
                 continue;
 
-            /* Get Raw Info */
             memset(&info, 0x0, sizeof(info));
             ret = ioctl(fd, HIDIOCGRAWINFO, &info);
             if (ret < 0)
@@ -220,11 +217,12 @@ log_warn("");
         }
         if (i >= globres.gl_pathc)
             return _hid_error(hid, HID_ERROR_OPEN, 0, "Searching hid device %x-%x", vendor_id, product_id);
-        strncpy(hid->ident, globres.gl_pathv[i], sizeof(hid->ident)-1);
+        snprintf(hid->ident, sizeof(hid->ident)-1, "%s %s", globres.gl_pathv[i], buf);
         globfree(&globres);
     }
     hid->fd = fd;
     hid->loop = loop;
+    iobuf_init(&hid->io.wbuf, IO_SIZE);
     iobuf_init(&hid->io.rbuf, IO_SIZE);
     ev_io_init(&hid->io.iow, _hid_write_cb, hid->fd, EV_WRITE);
     ev_io_init(&hid->io.ior, _hid_read_cb, hid->fd, EV_READ);
@@ -303,7 +301,10 @@ int hid_close(hid_t *hid)
 
     ev_io_stop(hid->loop, &hid->io.ior);
     ev_io_stop(hid->loop, &hid->io.iow);
+    iobuf_free(&hid->io.rbuf);
+    iobuf_free(&hid->io.rbuf);
 
+    memset(hid->ident, 0, sizeof(hid->ident));
     if (close(hid->fd) < 0)
         return _hid_error(hid, HID_ERROR_CLOSE, errno, "Closing hid device");
 

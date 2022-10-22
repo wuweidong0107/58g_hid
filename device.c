@@ -14,12 +14,12 @@ int devices_init(struct ev_loop *loop)
 
     aw5808_options_t opt;
     opt.serial = "/dev/ttyS1";
-    opt.usb_name = "????";
+    opt.usb = "usb-xhci-hcd.9.auto-1/input3";
     opt.mode = AW5808_MODE_USB;
     opt.loop = loop;
 
     if ((aws[0] = aw5808_new()) == NULL) {
-        log_error("aw5808_new() fail", opt.usb_name);
+        log_error("aw5808_new() fail", opt.usb);
         return -1;
     }
     if (aw5808_open(aws[0], &opt) != 0) {

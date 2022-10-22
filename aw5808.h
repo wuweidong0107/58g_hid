@@ -24,16 +24,16 @@ typedef enum aw5808_mode {
 
 typedef struct aw5808_handle aw5808_t;
 struct aw5808_cbs {
-    void (*on_set_mode)(aw5808_t *aw, const uint8_t *data, int len);
+    void (*on_set_mode)(aw5808_t *aw, const int mode);
     void (*on_get_config)(aw5808_t *aw, const uint8_t *data, int len);
 };
 
 typedef struct aw5808_options {
-    const char *serial;
+    const char *serial;             /* optional */
+    const char *usb;                 /* optional */
     uint16_t usb_vid;
     uint16_t usb_pid;
-    const char *usb_name;
-    aw5808_mode_t mode;
+    aw5808_mode_t mode;             /* i2s/usb */
     struct aw5808_cbs *cbs;
     struct ev_loop *loop;
 } aw5808_options_t;
@@ -44,8 +44,10 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt);
 void aw5808_close(aw5808_t *aw);
 int aw5808_get_config(aw5808_t *aw);
 int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode);
+int aw5808_set_mode_sync(aw5808_t *aw, aw5808_mode_t mode, int timeout_us);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
 
+int aw5808_mode(aw5808_t *aw);
 const char *aw5808_id(aw5808_t *aw);
 const char *aw5808_tostring(aw5808_t *aw);
 void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs);

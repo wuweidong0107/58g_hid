@@ -40,7 +40,7 @@ static void stdout_callback(log_Event *ev)
 #else
     if (ev->level != LOG_INFO)
         fprintf(
-            ev->udata, "%s %-5s %s %s %d ",
+            ev->udata, "%s %-5s %s %s %d: ",
             buf, level_strings[ev->level], ev->file, ev->function, ev->line);
 #endif
     vfprintf(ev->udata, ev->fmt, ev->ap);
