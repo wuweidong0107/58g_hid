@@ -38,7 +38,9 @@ struct aw5808_handle {
     char usb_name[64];
     hid_t *hid;
     const codec_t *codec_hid;
-    int mode;
+    aw5808_mode_t mode;                 /* i2s or usb */
+    aw5808_i2s_mode_t i2s_mode;         /* master or slave */
+    aw5808_connect_mode_t conn_mode;    /* multi or single */
 
     int udev_fd;
     struct io_channel udev_io;
@@ -120,7 +122,7 @@ static int aw5808_serial_sendframe(aw5808_t *aw, const uint8_t *data, size_t dat
     return 0;
 }
 
-static int aw5808_on_serial_read(serial_t *serial, const uint8_t *buf, size_t len)
+static int aw5808_on_serial_readframe(serial_t *serial, const uint8_t *buf, size_t len)
 {
     aw5808_t *aw = serial_get_userdata(serial);
     const codec_t *codec_serial = aw->codec_serial;
@@ -154,12 +156,26 @@ static int aw5808_on_serial_read(serial_t *serial, const uint8_t *buf, size_t le
                     aw->cbs->on_get_config(aw, data, data_len);
                 break;
             case 0xD1:
-                if (aw->cbs->on_get_rfstatus && data_len == 0x02)
+                if (aw->cbs->on_get_rfstatus && data_len == 2)
                     aw->cbs->on_get_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
                 break;
+            case 0x52:
+                if (aw->cbs->on_notify_rfstatus && data_len == 2)
+                    aw->cbs->on_notify_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
+            case 0xD3:
+                if (aw->cbs->on_pair)
+                    aw->cbs->on_pair(aw);
             case 0xD4:
-                if (aw->cbs->on_set_mode && data_len == 0x02)
+                if (aw->cbs->on_set_mode && data_len == 2)
                     aw->cbs->on_set_mode(aw, data[1]);
+                break;
+            case 0xD5:
+                if (aw->cbs->on_set_i2s_mode && data_len == 2)
+                    aw->cbs->on_set_i2s_mode(aw, data[1]);
+                break;
+            case 0xD6:
+                if (aw->cbs->on_set_connect_mode && data_len == 2)
+                    aw->cbs->on_set_connect_mode(aw, data[1]);
                 break;
             default:
                 break;
@@ -169,7 +185,7 @@ static int aw5808_on_serial_read(serial_t *serial, const uint8_t *buf, size_t le
 }
 
 static struct serial_cbs cbs = {
-    .on_read = aw5808_on_serial_read,
+    .on_read = aw5808_on_serial_readframe,
 };
 
 const char *aw5808_errmsg(aw5808_t *aw)
@@ -253,6 +269,8 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
             log_warn("hid not ready yet");
     }
     
+    aw->i2s_mode = AW5808_MODE_I2S_UNKNOWN;
+    aw->conn_mode = AW5808_MODE_CONN_UNKNOWN;
     return 0;
 }
 
@@ -286,6 +304,30 @@ int aw5808_get_rfstatus(aw5808_t *aw)
         return 0;
     } else if (aw->hid) {
         // TODO
+    }
+    return -1;
+}
+
+int aw5808_reply_rfstatus_notify(aw5808_t *aw)
+{
+    if (aw->serial) {
+        uint8_t data[2] = {0xD2, 0xFF};
+        size_t data_len = 2;
+        if (aw5808_serial_sendframe(aw, data, data_len, 0) != 0)
+            return _aw5808_error(aw, AW5808_ERROR_IO_SERIAL, 0, "Getting RF status");
+        return 0;
+    }
+    return -1;
+}
+
+int aw5808_pair(aw5808_t *aw)
+{
+    if (aw->serial) {
+        uint8_t data[2] = {0x53, 0xFF};
+        size_t data_len = 2;
+        if (aw5808_serial_sendframe(aw, data, data_len, 0) != 0)
+            return _aw5808_error(aw, AW5808_ERROR_QUERY, 0, "Pairing");
+        return 0;
     }
     return -1;
 }
@@ -335,6 +377,55 @@ int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
     
     if (aw5808_serial_sendframe(aw, data, data_len, 0) != 0)
         return _aw5808_error(aw, AW5808_ERROR_QUERY, 0, "Setting mode");
+
+    return 0;
+}
+
+int aw5808_set_i2s_mode(aw5808_t *aw, aw5808_i2s_mode_t mode)
+{
+    uint8_t data[2] = {0x55, mode};
+    size_t data_len = 2;
+
+    if (!aw->serial)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Not support serial");
+
+    if (mode != AW5808_MODE_I2S_MASTER && mode != AW5808_MODE_I2S_SLAVE)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Invalid i2s mode");
+
+    if (aw->mode != AW5808_MODE_I2S)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Not working in i2s mode");
+
+    /* Already in request mode ? */
+    if (mode == aw->i2s_mode) {
+        aw->cbs->on_set_i2s_mode(aw, mode);
+        return 0;
+    }
+    
+    if (aw5808_serial_sendframe(aw, data, data_len, 0) != 0)
+        return _aw5808_error(aw, AW5808_ERROR_QUERY, 0, "Setting i2s mode");
+
+    return 0;
+}
+
+int aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode)
+{
+    uint8_t data[2] = {0x56, mode};
+    size_t data_len = 2;
+
+    if (!aw->serial)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Not support serial");
+
+    if (mode != AW5808_MODE_CONN_MULTI && mode != AW5808_MODE_CONN_SINGLE)
+        return _aw5808_error(aw, AW5808_ERROR_CONFIGURE, 0, "Invalid connect mode");
+
+    /* Already in request mode ? */
+    if (mode == aw->conn_mode) {
+        aw->cbs->on_set_connect_mode(aw, mode);
+        return 0;
+    }
+    
+    if (aw5808_serial_sendframe(aw, data, data_len, 0) != 0)
+        return _aw5808_error(aw, AW5808_ERROR_QUERY, 0, "Setting connect mode");
 
     return 0;
 }

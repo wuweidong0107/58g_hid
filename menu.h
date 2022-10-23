@@ -19,7 +19,9 @@ void shell_exec(int argc, char *argv[]);
 int cmd_aw5808_list(int argc, char *argv[]);
 int cmd_aw5808_get_config(int argc, char *argv[]);
 int cmd_aw5808_get_rfstatus(int argc, char *argv[]);
+int cmd_aw5808_pair(int argc, char *argv[]);
 int cmd_aw5808_set_mode(int argc, char *argv[]);
-int cmd_aw5808_get_fwver(int argc, char *argv[]);
+int cmd_aw5808_set_i2s_mode(int argc, char *argv[]);
+int cmd_aw5808_set_connect_mode(int argc, char *argv[]);
 void menu_init(void);
 #endif
