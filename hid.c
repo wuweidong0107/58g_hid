@@ -176,7 +176,7 @@ int hid_open(hid_t *hid, const char *path, uint16_t vendor_id, uint16_t product_
     if (path) {
         if ((fd = open(path, O_RDWR|O_NONBLOCK)) < 0)
             return _hid_error(hid, HID_ERROR_OPEN, errno, "Openging hid device %s", path);
-        snprintf(hid->ident, sizeof(hid->ident)-1, "%s %s", path, name);
+        snprintf(hid->ident, sizeof(hid->ident)-1, "%s(%s)", path, name);
     } else {
         struct hidraw_devinfo info;
         char *path2="/dev/hidraw*";
@@ -217,7 +217,7 @@ int hid_open(hid_t *hid, const char *path, uint16_t vendor_id, uint16_t product_
         }
         if (i >= globres.gl_pathc)
             return _hid_error(hid, HID_ERROR_OPEN, 0, "Searching hid device %x-%x", vendor_id, product_id);
-        snprintf(hid->ident, sizeof(hid->ident)-1, "%s %s", globres.gl_pathv[i], buf);
+        snprintf(hid->ident, sizeof(hid->ident)-1, "%s(%s)", globres.gl_pathv[i], buf);
         globfree(&globres);
     }
     hid->fd = fd;

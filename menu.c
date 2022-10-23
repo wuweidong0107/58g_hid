@@ -42,6 +42,7 @@ static int cmd_help(int argc, char *argv[])
 static command_t commands[] = {
     { "list", cmd_aw5808_list, "List all aw5808" },
     { "getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
+    { "getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
     { "setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
@@ -129,14 +130,34 @@ void shell_exec(int argc, char *argv[])
 
 void on_aw5808_get_config(aw5808_t *aw, const uint8_t *data, int len)
 {
-    shell_printf("5.8g firmware version: %x %x\n", data[1], data[2]);
+    shell_printf("5.8G firmware version: %x %x\n", data[1], data[2]);
     shell_printf("MCU firmware version: %x\n", data[3]);
     shell_printf("Mode: %s\n", data[4] == AW5808_MODE_I2S ? "i2s":"usb");
     shell_printf("RF Channel: %d\n", data[5]);
     shell_printf("RF Power: %d\n", data[6]);    
 }
 
-void on_aw5808_set_mode(aw5808_t *aw, const int mode)
+void on_aw5808_get_rfstatus(aw5808_t *aw, uint8_t is_connected, uint8_t pair_status)
+{
+    shell_printf("5.8G link status: %s\n", is_connected ? "connected" : "disconnected");
+    shell_printf("5.8G pair status: ");
+    switch(pair_status) {
+        case 0:
+            shell_printf("exit pairing\n");
+            break;
+        case 1:
+            shell_printf("pairing fail\n");
+            break;
+        case 2:
+            shell_printf("pairing success\n");
+            break;
+        case 3:
+            shell_printf("pairing\n");
+            break;
+    }
+}
+
+void on_aw5808_set_mode(aw5808_t *aw, int mode)
 {
     switch(mode) {
         case AW5808_MODE_I2S:
@@ -152,6 +173,7 @@ void on_aw5808_set_mode(aw5808_t *aw, const int mode)
 
 static struct aw5808_cbs menu_cbs = {
     .on_get_config = on_aw5808_get_config,
+    .on_get_rfstatus = on_aw5808_get_rfstatus,
     .on_set_mode = on_aw5808_set_mode,
 };
 
@@ -177,6 +199,20 @@ int cmd_aw5808_get_config(int argc, char *argv[])
         return -1;
 
     return aw5808_get_config(aw);
+}
+
+
+int cmd_aw5808_get_rfstatus(int argc, char *argv[])
+{
+    int index = 0;
+    if (argc == 2)
+        index = strtoul(argv[1], NULL, 10);
+
+    aw5808_t *aw = get_aw5808(index);
+    if (aw == NULL)
+        return -1;
+
+    return aw5808_get_rfstatus(aw);
 }
 
 int cmd_aw5808_get_fwver(int argc, char *argv[])

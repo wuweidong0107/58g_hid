@@ -3,15 +3,28 @@
 #include "codec.h"
 #include "log.h"
 
-static size_t aw5808_serial_encode(uint8_t *frame, size_t data_length)
+static size_t aw5808_serial_encode(uint8_t *frame, size_t data_len)
 {
-    return 0;
+    if(data_len < 1)
+        return 0;
+    
+    struct protocol_head_aw5080_serial *header = (struct protocol_head_aw5080_serial *)frame;
+    header->preamble = PREAMBLE_AW5808_SERIAL;
+    header->delimiter = DELIMITER_AW5808_SERIAL;
+    header->payload_length = data_len - 1;
+    
+    size_t cmd_len = 1;         /* 1 byte CommandID */
+    size_t checksum_len = 1;    /* 1 byte CheckSum */
+    size_t frame_len = sizeof(struct protocol_head_aw5080_serial) + cmd_len + header->payload_length + checksum_len;
+    uint8_t *checksum = (uint8_t*)header + frame_len -1;
+    *checksum = 0x0;
+    return frame_len;
 }
 
-/* 0x55 0xAA [1 byte payloadlen] [1 byte cmd] [ n byte pyaload] [1 byte checksum] */
-static size_t aw5808_serial_decode(const uint8_t *frame, size_t length, const uint8_t **payload, size_t *payload_length)
+/* 0x55 0xAA [1 byte datalen] [1 byte cmd] [ n byte pyaload] [1 byte checksum] */
+static size_t aw5808_serial_decode(const uint8_t *frame, size_t length, const uint8_t **data, size_t *data_len)
 {
-    *payload = NULL;
+    *data = NULL;
     if (length < 4)
         return 0;
 
@@ -19,24 +32,23 @@ static size_t aw5808_serial_decode(const uint8_t *frame, size_t length, const ui
     if (header->preamble != PREAMBLE_AW5808_SERIAL || header->delimiter != DELIMITER_AW5808_SERIAL)
         return 2;
 
-    size_t data_len = header->data_length;
-    size_t cmd_len = 1;
-    size_t checksum_len = 1;
-    size_t frame_len = sizeof(struct protocol_head_aw5080_serial) + cmd_len + data_len + checksum_len;
+    size_t cmd_len = 1;         /* 1 byte CommandID */
+    size_t checksum_len = 1;    /* 1 byte CheckSum */
+    size_t frame_len = sizeof(struct protocol_head_aw5080_serial) + cmd_len + header->payload_length  + checksum_len;
     if (length < frame_len)
         return 0;
     
-    *payload = header->data;
-    *payload_length = cmd_len + header->data_length;
+    *data = header->data;
+    *data_len = cmd_len + header->payload_length;
     return frame_len;
 }
 
-static size_t aw5808_hid_encode(uint8_t *frame, size_t data_length)
+static size_t aw5808_hid_encode(uint8_t *frame, size_t data_len)
 {
     return 0;
 }
 
-static size_t aw5808_hid_decode(const uint8_t *frame, size_t length, const uint8_t **payload, size_t *payload_length)
+static size_t aw5808_hid_decode(const uint8_t *frame, size_t length, const uint8_t **data, size_t *data_len)
 {
 
     return 0;
