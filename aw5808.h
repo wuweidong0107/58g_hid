@@ -44,6 +44,9 @@ struct aw5808_cbs {
     void (*on_set_mode)(aw5808_t *aw, aw5808_mode_t mode);
     void (*on_set_i2s_mode)(aw5808_t *aw, aw5808_i2s_mode_t mode);
     void (*on_set_connect_mode)(aw5808_t *aw, aw5808_connect_mode_t mode);
+    void (*on_set_rfchannel)(aw5808_t *aw, uint8_t channel);
+    void (*on_set_rfpower)(aw5808_t *aw, uint8_t power);
+
 };
 
 typedef struct aw5808_options {
@@ -68,6 +71,8 @@ int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode);
 int aw5808_set_mode_sync(aw5808_t *aw, aw5808_mode_t mode, int timeout_us);
 int aw5808_set_i2s_mode(aw5808_t *aw, aw5808_i2s_mode_t mode);
 int aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode);
+int aw5808_set_rfchannel(aw5808_t *aw, uint8_t channel);
+int aw5808_set_rfpower(aw5808_t *aw, uint8_t power);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
 
 int aw5808_mode(aw5808_t *aw);

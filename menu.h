@@ -23,5 +23,8 @@ int cmd_aw5808_pair(int argc, char *argv[]);
 int cmd_aw5808_set_mode(int argc, char *argv[]);
 int cmd_aw5808_set_i2s_mode(int argc, char *argv[]);
 int cmd_aw5808_set_connect_mode(int argc, char *argv[]);
+int cmd_aw5808_set_rfchannel(int argc, char *argv[]);
+int cmd_aw5808_set_rfpower(int argc, char *argv[]);
+
 void menu_init(void);
 #endif
