@@ -38,6 +38,7 @@ obj-y += aw5808.o
 obj-y += hid.o
 obj-y += serial.o
 obj-y += codec.o
+obj-y += ini.o
 
 all : 
 	make -C ./ -f $(TOPDIR)/Makefile.build
