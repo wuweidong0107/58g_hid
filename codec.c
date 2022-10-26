@@ -54,21 +54,39 @@ static size_t aw5808_hid_decode(const uint8_t *frame, size_t length, const uint8
     return 0;
 }
 
-codec_t codec_aw5808_serial = {
+static size_t uband_serial_encode(uint8_t *frame, size_t data_len)
+{
+    return 0;
+}
+
+static size_t uband_serial_decode(const uint8_t *frame, size_t length, const uint8_t **data, size_t *data_len)
+{
+
+    return 0;
+}
+
+static codec_t codec_aw5808_serial = {
    .ident = "aw5808_serial",
    .encode = aw5808_serial_encode,
    .decode = aw5808_serial_decode,
 };
 
-codec_t codec_aw5808_hid = {
+static codec_t codec_aw5808_hid = {
    .ident = "aw5808_hid",
    .encode = aw5808_hid_encode,
    .decode = aw5808_hid_decode,
 };
 
-const codec_t *codecs[] = {
+static codec_t codec_uband_serial = {
+   .ident = "uband_serial",
+   .encode = uband_serial_encode,
+   .decode = uband_serial_decode,
+};
+
+static codec_t *codecs[] = {
     &codec_aw5808_serial,
     &codec_aw5808_hid,
+    &codec_uband_serial,
     NULL,
 };
 

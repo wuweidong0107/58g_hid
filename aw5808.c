@@ -30,12 +30,12 @@ typedef struct {
 } __attribute__((packed)) hid_packet_t;
 
 struct aw5808_handle {
-    char ident[64];
+    char ident[128];
     /* io */
     struct ev_loop *loop;
     serial_t *serial;
     const codec_t *codec_serial;
-    char usb_name[64];
+    char usb_name[128];
     hid_t *hid;
     const codec_t *codec_hid;
     /* device config */

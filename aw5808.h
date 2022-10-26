@@ -50,12 +50,9 @@ struct aw5808_cbs {
 };
 
 typedef struct aw5808_options {
-    const char *serial;             /* optional */
-    const char *usb;                 /* optional */
-    uint16_t usb_vid;
-    uint16_t usb_pid;
+    char serial[96];             /* optional */
+    char usb[96];                 /* optional */
     aw5808_mode_t mode;             /* i2s/usb */
-    struct aw5808_cbs *cbs;
     struct ev_loop *loop;
 } aw5808_options_t;
 

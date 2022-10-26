@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <getopt.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <unistd.h>
@@ -14,9 +15,7 @@
 #include "thpool.h"
 #include "menu.h"
 
-threadpool thpool;
-struct ev_loop *loop;
-
+static struct ev_loop *loop;
 static void process_line(char *line)
 {
     if (line == NULL) {
@@ -72,18 +71,53 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
     }
 }
 
-int main(void)
+static void show_help(void)
 {
-    logger_init(NULL, 0);
+	fprintf(stderr, "Usage:\n" );
+    fprintf(stderr, "  --config <filename>   Specify config file\n" );
+    fprintf(stderr, "  --log <filename>      Log to file\n" );
+}
+
+int main(int argc, char *argv[])
+{
+    int c, option_index = 0;
+    char *log_file = NULL;
+    char *conf_file = "/etc/embdev.conf";
+    threadpool thpool;
+
+    struct option long_options[] = {
+        {"config", required_argument, 0, 'c'},
+        {"log", required_argument, 0, 'l'},
+        {0, 0, 0, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "c:hl:", long_options, &option_index)) != -1) {
+        switch(c) {
+            case 'c':
+                conf_file = optarg;
+                break;
+            case 'l':
+                log_file = optarg;
+                break;
+            case 'h':
+                show_help();
+                return 0;
+            case '?':
+                printf("unknown option: %c\n", optopt);
+                return 1;
+        }
+    }
+    logger_init(log_file, 0);
     log_info("build time: %s %s\n", __DATE__, __TIME__);
-    
+    log_info("config file: %s", conf_file);
+
     thpool = thpool_init(4);
     if (thpool == NULL) {
         log_error("thpool_init() fail");
         exit(1);
     }
 
-    // setup libev
+    /* setup async io */
     loop = ev_loop_new(EVBACKEND_EPOLL);
     ev_io stdin_watcher;
     ev_io_init(&stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
@@ -92,17 +126,19 @@ int main(void)
     ev_signal_init(&signal_watcher, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_watcher);
 
-    if (devices_init(loop) < 0) {
+    if (devices_init(loop, conf_file) < 0) {
         log_error("devices_init() fail");
         exit(1);
     }
 
+    /* setup menu */
     menu_init();
     fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
     rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
     shell_set_prompt(PROMPT_ON);
     ev_run(loop, 0);
 
+    /* cleanup */
     devices_exit();
     ev_io_stop(loop, &stdin_watcher);
     ev_loop_destroy(loop);
