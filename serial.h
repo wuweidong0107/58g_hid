@@ -25,15 +25,21 @@ typedef enum serial_parity {
     PARITY_EVEN,
 } serial_parity_t;
 
+typedef struct serial_options {
+    char path[96];
+    uint32_t baudrate;
+    struct ev_loop *loop;
+} serial_options_t;
+
 typedef struct serial_handle serial_t;
 
 struct serial_cbs {
-    int (*on_read)(serial_t *serial, const uint8_t *buf, size_t len);
+    int (*on_receive)(serial_t *serial, const uint8_t *buf, size_t len);
 };
 
 /* Primary Functions */
 serial_t *serial_new();
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs, struct ev_loop *loop);
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct ev_loop *loop);
 int serial_open_advanced(serial_t *serial, const char *path,
                          uint32_t baudrate, unsigned int databits,
                          serial_parity_t parity, unsigned int stopbits,
@@ -74,6 +80,7 @@ const char* serial_id(serial_t *serial);
 int serial_tostring(serial_t *serial, char *str, size_t len);
 void serial_set_userdata(serial_t *serial, void *userdata);
 void* serial_get_userdata(serial_t *serial);
+void serial_set_cbs(serial_t *serial, struct serial_cbs *cbs);
 
 /* Error Handling */
 int serial_errno(serial_t *serial);

@@ -24,7 +24,7 @@ export CFLAGS LDFLAGS
 TOPDIR := $(shell pwd)
 export TOPDIR
 
-TARGET := aw5808
+TARGET := devctl
 
 obj-y += main.o
 obj-y += menu.o

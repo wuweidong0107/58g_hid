@@ -227,21 +227,21 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         remain -= ret;
     } while (remain && nonblock);
 
-    if(serial->cbs->on_read) {
-        int len = serial->cbs->on_read(serial, rbuf->buf, rbuf->len);
+    if(serial->cbs->on_receive) {
+        int len = serial->cbs->on_receive(serial, rbuf->buf, rbuf->len);
         iobuf_del(rbuf, 0, len);
     }
 }
 
-int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct serial_cbs *cbs, struct ev_loop *loop)
+int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct ev_loop *loop)
 {
-    strncpy(serial->ident, path, sizeof(serial->ident)-1);
+    snprintf(serial->ident, sizeof(serial->ident)-1, "%s %d", path, baudrate);
     serial->loop = loop;
-    serial->cbs = cbs;
     return serial_open_advanced(serial, path, baudrate, 8, PARITY_NONE, 1, false, false);
 }
 
-int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, unsigned int databits, serial_parity_t parity, unsigned int stopbits, bool xonxoff, bool rtscts) {
+int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, unsigned int databits, serial_parity_t parity, unsigned int stopbits, bool xonxoff, bool rtscts)
+{
     struct termios termios_settings;
 
     /* Validate args */
@@ -758,7 +758,8 @@ int serial_tostring(serial_t *serial, char *str, size_t len) {
                     serial->fd, baudrate, databits_str, parity_str, stopbits_str, xonxoff_str, rtscts_str, vmin, vtime);
 }
 
-const char* serial_id(serial_t *serial) {
+const char* serial_id(serial_t *serial)
+{
     return serial->ident;
 }
 const char *serial_errmsg(serial_t *serial) {
@@ -781,4 +782,9 @@ void serial_set_userdata(serial_t *serial, void *userdata)
 void* serial_get_userdata(serial_t *serial)
 {
     return serial->user_data;
+}
+
+void serial_set_cbs(serial_t *serial, struct serial_cbs *cbs)
+{
+    serial->cbs = cbs;
 }

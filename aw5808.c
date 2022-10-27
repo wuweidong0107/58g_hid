@@ -126,7 +126,7 @@ static int serial_sendframe(aw5808_t *aw, const uint8_t *data, size_t data_len, 
     return 0;
 }
 
-static int on_serial_recvframe(serial_t *serial, const uint8_t *buf, size_t len)
+static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
 {
     aw5808_t *aw = serial_get_userdata(serial);
     const codec_t *codec_serial = aw->codec_serial;
@@ -197,7 +197,7 @@ static int on_serial_recvframe(serial_t *serial, const uint8_t *buf, size_t len)
 }
 
 static struct serial_cbs cbs = {
-    .on_read = on_serial_recvframe,
+    .on_receive = on_serial_receive,
 };
 
 const char *aw5808_errmsg(aw5808_t *aw)
@@ -253,10 +253,11 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
         return _error(aw, AW5808_ERROR_OPEN, 0, "No serial or usb specifed", opt->serial);
 
     if (opt->serial) {
-        if (serial_open(aw->serial, opt->serial, 57600, &cbs, opt->loop) !=0) {
+        if (serial_open(aw->serial, opt->serial, 57600, opt->loop) !=0) {
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
         }
 
+        serial_set_cbs(aw->serial, &cbs);
         serial_set_userdata(aw->serial, aw);
         aw->codec_serial = get_codec("aw5808_serial");
         if (!aw->codec_serial)

@@ -8,6 +8,8 @@
 #include "log.h"
 #include "menu.h"
 #include "aw5808.h"
+#include "serial.h"
+
 #include "thpool.h"
 #include "device.h"
 #include "stdstring.h"
@@ -33,22 +35,32 @@ static int cmd_help(int argc, char *argv[])
     int i=0;
     printf("Avaliable command:\n");
     for (; commands[i].name; i++) {
-        printf("\t%-40s %s\n", commands[i].name, commands[i].doc);
+        char *tokens[1];
+        string_split(commands[i].name, "_", tokens, 1);
+        if ((!strncmp("aw5808", tokens[0], strlen("aw5808")) && get_aw5808(0) == NULL) 
+            || (!strncmp("serial", tokens[0],strlen("serial")) && get_serial(0) == NULL)) {
+            free(tokens[0]);
+        } else {
+            free(tokens[0]);
+            printf("\t%-40s %s\n", commands[i].name, commands[i].doc);
+        }
     }
     printf("Exit by Ctrl+D.\n");
     return 0;
 }
 
 static command_t commands[] = {
-    { "list", cmd_aw5808_list, "List all aw5808" },
-    { "getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
-    { "getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
-    { "pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
-    { "setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
-    { "seti2smode [index] <master|slave>", cmd_aw5808_set_i2s_mode, "Set aw5808 i2s mode" },
-    { "setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
-    { "setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
-    { "setrfpower [index] <1-16>", cmd_aw5808_set_rfpower, "Set aw5808 RF power" },
+    { "aw5808_list", cmd_aw5808_list, "List all aw5808" },
+    { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
+    { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
+    { "aw5808_pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
+    { "aw5808_setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
+    { "aw5808_seti2smode [index] <master|slave>", cmd_aw5808_set_i2s_mode, "Set aw5808 i2s mode" },
+    { "aw5808_setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
+    { "aw5808_setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
+    { "aw5808_setrfpower [index] <1-16>", cmd_aw5808_set_rfpower, "Set aw5808 RF power" },
+    { "serial_list", cmd_serial_list, "List all serial" },
+    { "serial_send <index> <data1 data2 ...>", cmd_serial_send, "Send hex data by serial" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -217,7 +229,7 @@ static void on_aw5808_set_rfpower(aw5808_t *aw, uint8_t power)
     shell_printf("rf power is %d.\n", power);
 }
 
-static struct aw5808_cbs menu_cbs = {
+static struct aw5808_cbs aw5808_menu_cbs = {
     .on_get_config = on_aw5808_get_config,
     .on_get_rfstatus = on_aw5808_get_rfstatus,
     .on_notify_rfstatus = on_aw5808_notify_rfstatus,
@@ -422,12 +434,65 @@ int cmd_aw5808_set_rfpower(int argc, char *argv[])
     return ret;
 }
 
+static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
+{
+    int i;
+    for (i=0; i<len; i++) {
+        shell_printf("%i:%x\n",i, buf[i]);
+    }
+    return 0;
+}
+
+static struct serial_cbs serial_menu_cbs = {
+    .on_receive = on_serial_receive,
+};
+
+int cmd_serial_list(int argc, char *argv[])
+{
+    int i;
+    serial_t *aw;
+
+    for (i=0; (aw=get_serial(i)) != NULL; i++)
+        shell_printf("%d: %s\n", i, serial_id(aw));
+    
+    return 0;
+}
+
+int cmd_serial_send(int argc, char *argv[])
+{
+    int index;
+    uint8_t data[128];
+    int i,len;
+
+    if (argc < 2)
+        return -EINVAL;
+
+    index = strtoul(argv[1], NULL, 10);
+    for (i=2, len=0; i<argc && len<128; i++, len++) {
+        data[len] = strtoul(argv[i], NULL, 16);
+        printf("%d:%x\n", len, data[len]);
+    }
+    serial_t *serial = get_serial(index);
+    if (serial == NULL)
+        return -EINVAL;
+
+    len = len + 1;
+    if (serial_write(serial, data, len) != len)
+        log_info("%s", serial_errmsg(serial));
+    
+    return 0;
+}
 void menu_init(void)
 {
     int i;
     aw5808_t *aw;
+    serial_t *serial;
 
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
-        aw5808_set_cbs(aw, &menu_cbs);
+        aw5808_set_cbs(aw, &aw5808_menu_cbs);
+    }
+
+    for (i=0; (serial=get_serial(i)) != NULL; i++) {
+        serial_set_cbs(serial, &serial_menu_cbs);
     }
 }
