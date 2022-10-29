@@ -17,7 +17,7 @@ export STRIP OBJCOPY OBJDUMP
 CFLAGS := -Wall -O2 -g
 CFLAGS += -I $(shell pwd)/
 
-LDFLAGS := -lreadline -lpthread -lev -ludev
+LDFLAGS := -lreadline -lpthread -lev -ludev -lusb-1.0
 
 export CFLAGS LDFLAGS
 
@@ -35,8 +35,9 @@ obj-y += thpool.o
 obj-y += device.o
 obj-y += stdstring.o
 obj-y += aw5808.o
-obj-y += hid.o
+obj-y += hidraw.o
 obj-y += serial.o
+obj-y += usb.o
 obj-y += codec.o
 obj-y += ini.o
 
@@ -45,7 +46,7 @@ all :
 	$(CC) -o $(TARGET) built-in.o $(LDFLAGS)
 
 clean:
-	rm -f $(shell find -name "*.o")
-	rm -f $(shell find -name "*.d")
+	rm -f $(shell find -type f -name "*.o")
+	rm -f $(shell find -type f -name "*.d")
 	rm -f $(TARGET)
 	

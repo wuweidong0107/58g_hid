@@ -29,5 +29,7 @@ int cmd_aw5808_set_rfpower(int argc, char *argv[]);
 int cmd_serial_list(int argc, char *argv[]);
 int cmd_serial_send(int argc, char *argv[]);
 
+int cmd_usb_hid_list(int argc, char *argv[]);
+
 void menu_init(void);
 #endif

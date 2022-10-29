@@ -9,6 +9,7 @@
 #include "menu.h"
 #include "aw5808.h"
 #include "serial.h"
+#include "usb.h"
 
 #include "thpool.h"
 #include "device.h"
@@ -50,7 +51,7 @@ static int cmd_help(int argc, char *argv[])
 }
 
 static command_t commands[] = {
-    { "aw5808_list", cmd_aw5808_list, "List all aw5808" },
+    { "aw5808_list", cmd_aw5808_list, "List all aw5808 device" },
     { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
     { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
     { "aw5808_pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
@@ -59,8 +60,9 @@ static command_t commands[] = {
     { "aw5808_setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
     { "aw5808_setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
     { "aw5808_setrfpower [index] <1-16>", cmd_aw5808_set_rfpower, "Set aw5808 RF power" },
-    { "serial_list", cmd_serial_list, "List all serial" },
+    { "serial_list", cmd_serial_list, "List all serial device" },
     { "serial_send <index> <data1 data2 ...>", cmd_serial_send, "Send hex data by serial" },
+    { "usb_hid_list", cmd_usb_hid_list, "List all usb hid device" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -468,20 +470,48 @@ int cmd_serial_send(int argc, char *argv[])
         return -EINVAL;
 
     index = strtoul(argv[1], NULL, 10);
-    for (i=2, len=0; i<argc && len<128; i++, len++) {
-        data[len] = strtoul(argv[i], NULL, 16);
-        printf("%d:%x\n", len, data[len]);
-    }
     serial_t *serial = get_serial(index);
     if (serial == NULL)
         return -EINVAL;
 
+    for (i=2, len=0; i<argc && len<128; i++, len++) {
+        data[len] = strtoul(argv[i], NULL, 16);
+        printf("%d:%x\n", len, data[len]);
+    }
     len = len + 1;
     if (serial_write(serial, data, len) != len)
         log_info("%s", serial_errmsg(serial));
     
     return 0;
 }
+
+static void print_device(struct hid_device_info *cur_dev)
+{
+	shell_printf("Device Found\n");
+    shell_printf("  type: %04hx %04hx\n  path: %s\n", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+	shell_printf("  Interface:    %d\n",  cur_dev->interface_number);
+    shell_printf("\n");
+}
+
+static void print_devices(struct hid_device_info *cur_dev)
+{
+	while (cur_dev) {
+		print_device(cur_dev);
+		cur_dev = cur_dev->next;
+	}
+}
+
+int cmd_usb_hid_list(int argc, char *argv[])
+{
+    usb_t *usb = get_usb(0);        // all usb device can do enumeration job
+
+    struct hid_device_info *devs;
+    devs = usb_hid_enumerate(usb, 0x0, 0x0);
+	print_devices(devs);
+	usb_hid_free_enumeration(devs);
+    return 0;
+}
+
 void menu_init(void)
 {
     int i;

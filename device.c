@@ -5,6 +5,7 @@
 
 #include "device.h"
 #include "ini.h"
+#include "usb.h"
 #include "aw5808.h"
 #include "serial.h"
 #include "log.h"
@@ -13,6 +14,7 @@
 #define DEVICE_MAX_NUM  (8)
 static aw5808_t *aw_array[DEVICE_MAX_NUM];
 static serial_t *serial_array[DEVICE_MAX_NUM];
+static usb_t *usb_array[DEVICE_MAX_NUM];
 
 int devices_init(struct ev_loop *loop, const char *conf_file)
 {
@@ -22,12 +24,19 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
     int s, k;
     int aw_idx = 0;
     int serial_idx = 0;
+    int usb_idx = 0;
 
    if (access(conf_file, R_OK) < 0)
       return -1;
 
+    if (usb_init())
+        return -1;
+
     for (s = 0; ini_getsection(s, section, sizearray(section), conf_file) > 0; s++) {
-        if (!strncmp(section, "aw5808", strlen("aw5808") && aw_idx < DEVICE_MAX_NUM)) {
+        char *end = strchr(section, '/');
+        if (end != NULL)
+            *end = '\0';
+        if (!strncmp(section, "aw5808", strlen(section)) && aw_idx < DEVICE_MAX_NUM) {
             aw5808_options_t opt;
             memset(&opt, 0, sizeof(opt));
             opt.loop = loop;
@@ -51,7 +60,7 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
                 continue;
             }
             aw_idx++;
-        } else if (!strncmp(section, "serial", strlen("serial") && serial_idx < DEVICE_MAX_NUM)) {
+        } else if (!strncmp(section, "serial", strlen(section)) && serial_idx < DEVICE_MAX_NUM) {
             serial_options_t opt;
             memset(&opt, 0, sizeof(opt));
 
@@ -74,6 +83,12 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
                 continue;
             }
             serial_idx++;
+        } else if (!strncmp(section, "usb", strlen(section)) && usb_idx < DEVICE_MAX_NUM) {
+            if ((usb_array[usb_idx] = usb_new()) == NULL) {
+                log_error("usb[%d] new fail", usb_idx);
+                continue ;
+            }
+            usb_idx++;
         }
     }
     return 0;
@@ -95,6 +110,14 @@ void devices_exit(void)
             serial_free(serial_array[i]);
         }
     }
+
+    for (i=0; i<DEVICE_MAX_NUM; i++) {
+        if (usb_array[i]) {
+            usb_free(usb_array[i]);
+        }
+    }
+
+    usb_exit();
 }
 
 aw5808_t *get_aw5808(int index)
@@ -111,4 +134,12 @@ serial_t *get_serial(int index)
         return NULL;
 
     return serial_array[index];
+}
+
+usb_t *get_usb(int index)
+{
+    if(index >= DEVICE_MAX_NUM)
+        return NULL;
+
+    return usb_array[index];
 }
