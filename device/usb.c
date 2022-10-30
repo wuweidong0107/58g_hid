@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
-#include <libusb-1.0/libusb.h>
 #include "log.h"
 #include "usb.h"
+#include "usbhid.h"
 
 static libusb_context *usb_context = NULL;
 
@@ -17,40 +17,23 @@ struct usb_handle {
     } error;
 };
 
-int usb_init(void)
+static int _error(usb_t *usb, int code, int c_errno, const char *fmt, ...)
 {
-	if (!usb_context) {
-		if (libusb_init(&usb_context))
-			return -1;
-	}
+    va_list ap;
 
-	return 0;
-}
+    usb->error.c_errno = c_errno;
 
-void usb_exit(void)
-{
-	if (usb_context) {
-		libusb_exit(usb_context);
-		usb_context = NULL;
-	}
-}
+    va_start(ap, fmt);
+    vsnprintf(usb->error.errmsg, sizeof(usb->error.errmsg), fmt, ap);
+    va_end(ap);
 
-usb_t *usb_new(void)
-{
-    if (!usb_context)
-        return NULL;
+    if (c_errno) {
+        char buf[64];
+        strerror_r(c_errno, buf, sizeof(buf));
+        snprintf(usb->error.errmsg+strlen(usb->error.errmsg), sizeof(usb->error.errmsg)-strlen(usb->error.errmsg), ": %s [errno %d]", buf, c_errno);
+    }
 
-    usb_t *usb = calloc(1, sizeof(usb_t));
-    if (usb == NULL)
-        return NULL;
-
-    usb->context = usb_context;
-    return usb;
-}
-
-void usb_free(usb_t *usb)
-{
-    free(usb);
+    return code;
 }
 
 /**
@@ -109,6 +92,58 @@ static struct hid_device_info * create_device_info_for_device(libusb_device *dev
 
 	return cur_dev;
 }
+
+int usb_init(void)
+{
+	if (!usb_context) {
+		if (libusb_init(&usb_context))
+			return -1;
+	}
+
+	return 0;
+}
+
+void usb_exit(void)
+{
+	if (usb_context) {
+		libusb_exit(usb_context);
+		usb_context = NULL;
+	}
+}
+
+usb_t *usb_new(void)
+{
+    if (!usb_context)
+        return NULL;
+
+    usb_t *usb = calloc(1, sizeof(usb_t));
+    if (usb == NULL)
+        return NULL;
+
+    usb->context = usb_context;
+    return usb;
+}
+
+void usb_free(usb_t *usb)
+{
+    free(usb);
+}
+
+/*
+int usb_open(usb_t *usb)
+{
+    if (usb_init() < 0)
+        return _usb_error(usbhid, USBHID_ERROR_OPEN, 0, "Openging usbhid device %s", path);
+
+
+    return 0;
+}
+
+int usb_close(usbhid_t *serial);
+{
+
+}
+*/
 
 struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id)
 {
@@ -178,7 +213,7 @@ struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16
 	return root;
 }
 
-void usb_hid_free_enumeration(struct hid_device_info *devs)
+void usb_hid_free_enumeration(usb_t *usb, struct hid_device_info *devs)
 {
 	struct hid_device_info *d = devs;
 	while (d) {
@@ -188,3 +223,62 @@ void usb_hid_free_enumeration(struct hid_device_info *devs)
 		d = next;
 	}
 }
+
+#if 0
+int usb_hid_open_path(usb_t *usb, const char *path, int *config_number, struct libusb_interface_descriptor *intf_desc)
+{
+	libusb_device **devs = NULL;
+	libusb_device *usb_dev = NULL;
+	int res = 0;
+	int d = 0;
+	int good_open = 0;
+
+	if(usb_init() < 0)
+		return NULL;
+
+	libusb_get_device_list(usb_context, &devs);
+	while ((usb_dev = devs[d++]) != NULL && !good_open) {
+		struct libusb_config_descriptor *conf_desc = NULL;
+		int j,k;
+
+		if (libusb_get_active_config_descriptor(usb_dev, &conf_desc) < 0)
+			continue;
+		for (j = 0; j < conf_desc->bNumInterfaces && !good_open; j++) {
+			const struct libusb_interface *intf = &conf_desc->interface[j];
+			for (k = 0; k < intf->num_altsetting && !good_open; k++) {
+				const struct libusb_interface_descriptor *intf_desc = &intf->altsetting[k];
+				if (intf_desc->bInterfaceClass == LIBUSB_CLASS_HID) {
+					char dev_path[64];
+					get_path(&dev_path, usb_dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
+					if (!strcmp(dev_path, path)) {
+						/* Matched Paths. Open this device */
+
+						/* OPEN HERE */
+						res = libusb_open(usb_dev, &dev->device_handle);
+						if (res < 0) {
+							LOG("can't open device\n");
+							break;
+						}
+						good_open = hidapi_initialize_device(dev, conf_desc->bConfigurationValue, intf_desc);
+						if (!good_open)
+							libusb_close(dev->device_handle);
+					}
+				}
+			}
+		}
+		libusb_free_config_descriptor(conf_desc);
+	}
+
+	libusb_free_device_list(devs, 1);
+
+	/* If we have a good handle, return it. */
+	if (good_open) {
+		return dev;
+	}
+	else {
+		/* Unable to open any devices. */
+		free_hid_device(dev);
+		return NULL;
+	}
+}
+#endif

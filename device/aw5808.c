@@ -27,7 +27,7 @@ typedef struct {
     uint8_t reg;    // reg address
     uint8_t len;    // data length
     uint8_t data[61];
-} __attribute__((packed)) hid_packet_t;
+} __attribute__((packed)) hidraw_packet_t;
 
 struct aw5808_handle {
     char ident[128];
@@ -36,8 +36,8 @@ struct aw5808_handle {
     serial_t *serial;
     const codec_t *codec_serial;
     char usb_name[128];
-    hid_t *hid;
-    const codec_t *codec_hid;
+    hidraw_t *hidraw;
+    const codec_t *codec_hidraw;
     /* device config */
     aw5808_mode_t mode;                 /* i2s or usb */
     aw5808_i2s_mode_t i2s_mode;         /* master or slave */
@@ -94,11 +94,11 @@ static void udev_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 #endif
         if (strstr(udev_device_get_devpath(dev), "25A7:5804") != NULL) {
             if (!strcmp(udev_device_get_action(dev), "add")) {
-                if(hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop) != 0)
-                    log_error("Opening hid in udev");
+                if(hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop) != 0)
+                    log_error("Opening hidraw in udev");
                 aw->mode = AW5808_MODE_USB;
             } else if (!strcmp(udev_device_get_action(dev), "remove")) {
-                hid_close(aw->hid);
+                hidraw_close(aw->hidraw);
                 aw->mode = AW5808_MODE_I2S;
             }
         }
@@ -220,8 +220,8 @@ aw5808_t *aw5808_new()
     if (!aw->serial)
         goto fail;
 
-    aw->hid = hid_new();
-    if (!aw->hid)
+    aw->hidraw = hidraw_new();
+    if (!aw->hidraw)
         goto fail;
 
 	/* create udev object */
@@ -239,8 +239,8 @@ void aw5808_free(aw5808_t *aw)
 {
     udev_unref(aw->udev);
 
-    if (aw->hid)
-        hid_free(aw->hid);
+    if (aw->hidraw)
+        hidraw_free(aw->hidraw);
     if (aw->serial)
         serial_free(aw->serial);
     if (aw)
@@ -277,9 +277,9 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
         ev_io_init(&aw->udev_io.ior, udev_read_cb, aw->udev_fd, EV_READ);
         ev_io_start(aw->loop, &aw->udev_io.ior);
     
-        /* if fail as hid not ready yet, will reopen it at udev callback. */
-        if (hid_open(aw->hid, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop))
-            log_warn("hid not ready yet");
+        /* if fail as hidraw not ready yet, will reopen it at udev callback. */
+        if (hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop))
+            log_warn("hidraw not ready yet");
     }
     
     aw->i2s_mode = AW5808_MODE_I2S_UNKNOWN;
@@ -289,7 +289,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 
 void aw5808_close(aw5808_t *aw)
 {
-    hid_close(aw->hid);
+    hidraw_close(aw->hidraw);
     serial_close(aw->serial);
 }
 
@@ -300,7 +300,7 @@ int aw5808_get_config(aw5808_t *aw)
         size_t data_len = 2;
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         // TODO
     }
     return _error(aw, AW5808_ERROR_QUERY, 0, "Getting config");
@@ -313,7 +313,7 @@ int aw5808_get_rfstatus(aw5808_t *aw)
         size_t data_len = 2;
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         // TODO
     }
     return _error(aw, AW5808_ERROR_QUERY, 0, "Getting RF status");
@@ -326,7 +326,7 @@ int aw5808_reply_rfstatus_notify(aw5808_t *aw)
         size_t data_len = 2;
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         // TODO
     }
     return _error(aw, AW5808_ERROR_QUERY, 0, "Getting RF status");
@@ -339,7 +339,7 @@ int aw5808_pair(aw5808_t *aw)
         size_t data_len = 2;
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         // TODO
     }
     return _error(aw, AW5808_ERROR_CONFIGURE, 0, "Pairing");
@@ -384,7 +384,7 @@ int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
     
     if (aw->serial) {
         if (mode == AW5808_MODE_I2S && aw->mode == AW5808_MODE_USB)
-            hid_close(aw->hid);
+            hidraw_close(aw->hidraw);
         
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
@@ -439,7 +439,7 @@ int aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode)
     return _error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting connect mode");
 }
 
-/* Support serial and usbhid */
+/* Support serial and hidraw */
 int aw5808_set_rfchannel(aw5808_t *aw, uint8_t channel)
 {
     uint8_t data[2] = {0x57, channel};
@@ -457,7 +457,7 @@ int aw5808_set_rfchannel(aw5808_t *aw, uint8_t channel)
     if (aw->serial) {
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         //TODO
     }
     return _error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting RF channel");
@@ -480,7 +480,7 @@ int aw5808_set_rfpower(aw5808_t *aw, uint8_t power)
     if (aw->serial) {
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hid) {
+    } else if (aw->hidraw) {
         //TODO
     }
     return _error(aw, AW5808_ERROR_CONFIGURE, 0, "Setting RF power");
@@ -492,15 +492,15 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
         return _error(aw, AW5808_ERROR_ARG, 0, "Firmware version len too short");
     }
 
-    hid_packet_t pkt = {
+    hidraw_packet_t pkt = {
         .rw = HID_58G_READ,
         .reg = 0x0,
         .len = 0x02,
         .data = {0},
     };
     
-    if (hid_write(aw->hid, (uint8_t *) &pkt, sizeof(pkt)) != sizeof(pkt)) {
-        return _error(aw, AW5808_ERROR_ARG, 0, "aw5808 hid writing");
+    if (hidraw_write(aw->hidraw, (uint8_t *) &pkt, sizeof(pkt)) != sizeof(pkt)) {
+        return _error(aw, AW5808_ERROR_ARG, 0, "aw5808 hidraw writing");
     }
     return 0;
 }
@@ -510,9 +510,9 @@ int aw5808_mode(aw5808_t *aw)
     return aw->mode;
 }
 
-int aw5808_hid_fd(aw5808_t *aw)
+int aw5808_hidraw_fd(aw5808_t *aw)
 {
-    return hid_fd(aw->hid);
+    return hidraw_fd(aw->hidraw);
 }
 
 int aw5808_serial_fd(aw5808_t *aw)
@@ -522,7 +522,7 @@ int aw5808_serial_fd(aw5808_t *aw)
 
 const char *aw5808_id(aw5808_t *aw)
 {
-    snprintf(aw->ident, sizeof(aw->ident)-1, "%s %s", serial_id(aw->serial), hid_id(aw->hid));
+    snprintf(aw->ident, sizeof(aw->ident)-1, "%s %s", serial_id(aw->serial), hidraw_id(aw->hidraw));
     return aw->ident;
 }
 

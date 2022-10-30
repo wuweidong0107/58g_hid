@@ -15,7 +15,7 @@ export AS LD CC CPP AR NM
 export STRIP OBJCOPY OBJDUMP
 
 CFLAGS := -Wall -O2 -g
-CFLAGS += -I $(shell pwd)/
+CFLAGS += -I $(shell pwd)/ -I $(shell pwd)/device
 
 LDFLAGS := -lreadline -lpthread -lev -ludev -lusb-1.0
 
@@ -32,14 +32,10 @@ obj-y += log.o
 obj-y += stdstring.o
 obj-y += iobuf.o
 obj-y += thpool.o
-obj-y += device.o
 obj-y += stdstring.o
-obj-y += aw5808.o
-obj-y += hidraw.o
-obj-y += serial.o
-obj-y += usb.o
 obj-y += codec.o
 obj-y += ini.o
+obj-y += device/
 
 all : 
 	make -C ./ -f $(TOPDIR)/Makefile.build

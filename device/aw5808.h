@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <ev.h>
 
-#include "hid.h"
+#include "hidraw.h"
 #include "serial.h"
 
 enum aw5808_error_code {
@@ -13,7 +13,7 @@ enum aw5808_error_code {
     AW5808_ERROR_QUERY          = -3, /* Querying aw5808 device attributes */
     AW5808_ERROR_CONFIGURE      = -4, /* Configuring aw5808 device attributes */
     AW5808_ERROR_IO_SERIAL      = -5, /* Reading/writing aw5808 device via serial */
-    AW5808_ERROR_IO_HID         = -6, /* Reading/writing aw5808 device via hid */
+    AW5808_ERROR_IO_HID         = -6, /* Reading/writing aw5808 device via hidraw */
     AW5808_ERROR_CLOSE          = -7, /* Closing aw5808 device */
 };
 

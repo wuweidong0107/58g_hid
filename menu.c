@@ -508,7 +508,7 @@ int cmd_usb_hid_list(int argc, char *argv[])
     struct hid_device_info *devs;
     devs = usb_hid_enumerate(usb, 0x0, 0x0);
 	print_devices(devs);
-	usb_hid_free_enumeration(devs);
+	usb_hid_free_enumeration(usb, devs);
     return 0;
 }
 
