@@ -2,15 +2,22 @@
 #include <string.h>
 #include "log.h"
 #include "usb.h"
-#include "usbhid.h"
+#include "usb.h"
 
 static libusb_context *usb_context = NULL;
 
 struct usb_handle {
     char ident[64];
     libusb_context *context;
-    struct hid_device_info *devs;
+    libusb_device *usb_dev;
+    libusb_device_handle *dev_handle;
 
+    char path[64];
+	/* USB Configuration Number of the device */
+	int config_number;
+	/* The interface number of the HID */
+	int interface;
+    
     struct {
         int c_errno;
         char errmsg[256];
@@ -130,20 +137,83 @@ void usb_free(usb_t *usb)
 }
 
 /*
-int usb_open(usb_t *usb)
+ * path: bus-port:config_number.interface_number
+ */
+int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *path)
 {
-    if (usb_init() < 0)
-        return _usb_error(usbhid, USBHID_ERROR_OPEN, 0, "Openging usbhid device %s", path);
+	struct libusb_device **devs;
+	struct libusb_device *found = NULL;
+	struct libusb_device *dev;
+	struct libusb_device_handle *dev_handle = NULL;
+	size_t i = 0;
+	int r;
 
+printf("%x %x %s\n", vendor_id, product_id, path);
+    if (usb_init() < 0) {
+        return _error(usb, USB_ERROR_OPEN, 0, "USB not init");
+    }
 
-    return 0;
+	if (libusb_get_device_list(usb->context, &devs) < 0)
+		return NULL;
+
+	while ((dev = devs[i++]) != NULL) {
+		struct libusb_device_descriptor desc;
+		r = libusb_get_device_descriptor(dev, &desc);
+		if (r < 0)
+			goto out;
+		if (desc.idVendor == vendor_id && desc.idProduct == product_id) {
+			found = dev;
+			break;
+		}
+	}
+
+	if (found) {
+        if (path == NULL) {
+            r = libusb_open(found, &dev_handle);
+            if (r < 0)
+                dev_handle = NULL;
+        } else {
+            struct libusb_config_descriptor *conf_desc = NULL;
+            r = libusb_get_active_config_descriptor(dev, &conf_desc);
+            if (r < 0)
+                libusb_get_config_descriptor(dev, 0, &conf_desc);
+            if (conf_desc) {
+                int j,k;
+                for (j = 0; j < conf_desc->bNumInterfaces; j++) {
+                    const struct libusb_interface *intf = &conf_desc->interface[j];
+                    for (k = 0; k < intf->num_altsetting; k++) {
+                        const struct libusb_interface_descriptor *intf_desc;
+                        intf_desc = &intf->altsetting[k];
+                        char *tmp = make_path(dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
+                        printf("tmp:%s path=%s\n", tmp, path);
+                        if (!strncmp(path, tmp, strlen(path))) {
+                            r = libusb_open(found, &usb->dev_handle);
+                            if (r < 0) {
+                                usb->dev_handle = NULL;
+                            } else {
+                                usb->config_number = conf_desc->bConfigurationValue;
+                                usb->interface = intf_desc->bInterfaceNumber;
+                            }
+                            free(tmp);
+                            break;
+                        }
+                        free(tmp);
+                    } /* altsettings */
+                } /* interfaces */
+                libusb_free_config_descriptor(conf_desc);
+            }
+        }
+	}
+
+out:
+	libusb_free_device_list(devs, 1);
+	return usb->dev_handle != NULL ? 0:_error(usb, USB_ERROR_OPEN, 0, "Openning usb device");;
 }
 
-int usb_close(usbhid_t *serial);
-{
-
+int usb_close(usb_t *usb)
+{                                  
+    libusb_close(usb->dev_handle);
 }
-*/
 
 struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id)
 {
@@ -282,3 +352,13 @@ int usb_hid_open_path(usb_t *usb, const char *path, int *config_number, struct l
 	}
 }
 #endif
+
+const char *usb_errmsg(usb_t *usb)
+{
+    return usb->error.errmsg;
+}
+
+int usb_errno(usb_t *usb)
+{
+    return usb->error.c_errno;
+}

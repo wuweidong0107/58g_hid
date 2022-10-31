@@ -28,10 +28,18 @@ enum usb_error_code {
     USB_ERROR_CLOSE          = -6, /* Closing usb device */
 };
 
+typedef struct usb_options {
+    uint16_t vid;
+    uint16_t pid;
+    char path[96];
+} usb_options_t;
+
 int usb_init(void);
 void usb_exit(void);
 usb_t *usb_new(void);
 void usb_free(usb_t *usb);
+int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *path);
+int usb_close(usb_t *usb);
 struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id);
 void usb_hid_free_enumeration(usb_t *usb, struct hid_device_info *devs);
 #endif

@@ -20,7 +20,6 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
 {
     char section[64] = {0};
     char key[64] = {0};
-    char val[64]={0};
     int s, k;
     int aw_idx = 0;
     int serial_idx = 0;
@@ -41,7 +40,7 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
             memset(&opt, 0, sizeof(opt));
             opt.loop = loop;
             for (k = 0; ini_getkey(section, k, key, sizearray(key), conf_file) > 0; k++) {
-                if (!strncmp(key, "serial", strlen(key))) {
+                if (!strncmp(key, "serial", strlen("serial"))) {
                     ini_gets(section, key, "dummy", opt.serial, sizearray(opt.serial), conf_file);
                 } else if (!strncmp(key, "usb", strlen("usb"))) {
                     ini_gets(section, key, "dummy", opt.usb, sizearray(opt.usb), conf_file);
@@ -63,9 +62,7 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
         } else if (!strncmp(section, "serial", strlen(section)) && serial_idx < DEVICE_MAX_NUM) {
             serial_options_t opt;
             memset(&opt, 0, sizeof(opt));
-
             for (k = 0; ini_getkey(section, k, key, sizearray(key), conf_file) > 0; k++) {
-                memset(val, 0, sizeof(val));
                 if (!strncmp(key, "path", strlen("path"))) {
                     ini_gets(section, key, "dummy", opt.path, sizearray(opt.path), conf_file);
                 } else if (!strncmp(key, "baudrate", strlen("baudrate"))) {
@@ -84,9 +81,26 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
             }
             serial_idx++;
         } else if (!strncmp(section, "usb", strlen(section)) && usb_idx < DEVICE_MAX_NUM) {
+            usb_options_t opt;
+            memset(&opt, 0, sizeof(opt));
+            for (k = 0; ini_getkey(section, k, key, sizearray(key), conf_file) > 0; k++) {
+                if (!strncmp(key, "path", strlen("path"))) {
+                    ini_gets(section, key, "dummy", opt.path, sizearray(opt.path), conf_file);
+                } else if (!strncmp(key, "vid", strlen("vid"))) {
+                    opt.vid = ini_getl(section, key, 0, conf_file);
+                } else if (!strncmp(key, "pid", strlen("pid"))) {
+                    opt.pid = ini_getl(section, key, 0, conf_file);
+                }
+            }
             if ((usb_array[usb_idx] = usb_new()) == NULL) {
                 log_error("usb[%d] new fail", usb_idx);
                 continue ;
+            }
+            if (usb_open(usb_array[usb_idx], opt.vid, opt.pid, opt.path) != 0) {
+                log_error("usb[%d] open fail: %s", usb_idx, usb_errmsg(usb_array[usb_idx]));
+                usb_free(usb_array[usb_idx]);
+                usb_array[usb_idx] = NULL;
+                continue;
             }
             usb_idx++;
         }
