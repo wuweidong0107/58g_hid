@@ -4,20 +4,34 @@
 #include "usb.h"
 #include "usb.h"
 
+#define HID_INPUT_REPORT	1
+#define HID_OUTPUT_REPORT	2
+#define HID_FEATURE_REPORT	3
+
 static libusb_context *usb_context = NULL;
 
 struct usb_handle {
     char ident[64];
     libusb_context *context;
     libusb_device *usb_dev;
-    libusb_device_handle *dev_handle;
+    libusb_device_handle *device_handle;
 
     char path[64];
-	/* USB Configuration Number of the device */
-	int config_number;
 	/* The interface number of the HID */
 	int interface;
     
+	/* Endpoint information */
+	int input_endpoint;
+	int output_endpoint;
+	int input_ep_max_packet_size;
+
+	/* Indexes of Strings */
+	int manufacturer_index;
+	int product_index;
+	int serial_index;
+
+    int is_driver_detached;
+
     struct {
         int c_errno;
         char errmsg[256];
@@ -80,14 +94,13 @@ static char *make_path(libusb_device *dev, int config_number, int interface_numb
 	return strdup(str);
 }
 
-static struct hid_device_info * create_device_info_for_device(libusb_device *device, libusb_device_handle *handle, struct libusb_device_descriptor *desc, int config_number, int interface_num)
+static struct usb_device_info *create_device_info_for_device(libusb_device *device, libusb_device_handle *handle, struct libusb_device_descriptor *desc, int config_number, int interface_num)
 {
-	struct hid_device_info *cur_dev = calloc(1, sizeof(struct hid_device_info));
+	struct usb_device_info *cur_dev = calloc(1, sizeof(struct usb_device_info));
 	if (cur_dev == NULL) {
 		return NULL;
 	}
 
-	/* VID/PID */
 	cur_dev->vendor_id = desc->idVendor;
 	cur_dev->product_id = desc->idProduct;
 	cur_dev->interface_number = interface_num;
@@ -97,7 +110,12 @@ static struct hid_device_info * create_device_info_for_device(libusb_device *dev
 		return cur_dev;
 	}
 
-	return cur_dev;
+    if (desc->iManufacturer)
+        libusb_get_string_descriptor_ascii(handle, desc->iManufacturer, cur_dev->manufacturer_string, sizeof(cur_dev->manufacturer_string));
+    if (desc->iProduct)
+        libusb_get_string_descriptor_ascii(handle, desc->iProduct, cur_dev->product_string, sizeof(cur_dev->product_string));
+	
+    return cur_dev;
 }
 
 int usb_init(void)
@@ -136,6 +154,78 @@ void usb_free(usb_t *usb)
     free(usb);
 }
 
+static int usb_initialize_device(usb_t *usb, const struct libusb_interface_descriptor *intf_desc)
+{
+	int i =0;
+	int res = 0;
+	struct libusb_device_descriptor desc;
+	libusb_get_device_descriptor(libusb_get_device(usb->device_handle), &desc);
+
+	/* Detach the kernel driver, but only if the
+	   device is managed by the kernel */
+	usb->is_driver_detached = 0;
+	if (libusb_kernel_driver_active(usb->device_handle, intf_desc->bInterfaceNumber) == 1) {
+		res = libusb_detach_kernel_driver(usb->device_handle, intf_desc->bInterfaceNumber);
+		if (res < 0) {
+			return 0;
+		} else {
+			usb->is_driver_detached = 1;
+		}
+	}
+
+	res = libusb_claim_interface(usb->device_handle, intf_desc->bInterfaceNumber);
+	if (res < 0) {
+		if (usb->is_driver_detached) {
+			libusb_attach_kernel_driver(usb->device_handle, intf_desc->bInterfaceNumber);
+		}
+		return 0;
+	}
+
+	/* Store off the string descriptor indexes */
+	usb->manufacturer_index = desc.iManufacturer;
+	usb->product_index      = desc.iProduct;
+	usb->serial_index       = desc.iSerialNumber;
+
+	/* Store off the USB information */
+	usb->interface = intf_desc->bInterfaceNumber;
+	usb->input_endpoint = 0;
+	usb->input_ep_max_packet_size = 0;
+	usb->output_endpoint = 0;
+
+	/* Find the INPUT and OUTPUT endpoints. An
+	   OUTPUT endpoint is not required. */
+	for (i = 0; i < intf_desc->bNumEndpoints; i++) {
+		const struct libusb_endpoint_descriptor *ep
+			= &intf_desc->endpoint[i];
+
+		/* Determine the type and direction of this
+		   endpoint. */
+		int is_interrupt =
+			(ep->bmAttributes & LIBUSB_TRANSFER_TYPE_MASK)
+		      == LIBUSB_TRANSFER_TYPE_INTERRUPT;
+		int is_output =
+			(ep->bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK)
+		      == LIBUSB_ENDPOINT_OUT;
+		int is_input =
+			(ep->bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK)
+		      == LIBUSB_ENDPOINT_IN;
+
+		/* Decide whether to use it for input or output. */
+		if (usb->input_endpoint == 0 &&
+		    is_interrupt && is_input) {
+			/* Use this endpoint for INPUT */
+			usb->input_endpoint = ep->bEndpointAddress;
+			usb->input_ep_max_packet_size = ep->wMaxPacketSize;
+		}
+		if (usb->output_endpoint == 0 &&
+		    is_interrupt && is_output) {
+			/* Use this endpoint for OUTPUT */
+			usb->output_endpoint = ep->bEndpointAddress;
+		}
+	}
+	return 1;
+}
+
 /*
  * path: bus-port:config_number.interface_number
  */
@@ -144,11 +234,11 @@ int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *pa
 	struct libusb_device **devs;
 	struct libusb_device *found = NULL;
 	struct libusb_device *dev;
-	struct libusb_device_handle *dev_handle = NULL;
+	struct libusb_device_handle *device_handle = NULL;
 	size_t i = 0;
 	int r;
+    int good_open = 0;
 
-printf("%x %x %s\n", vendor_id, product_id, path);
     if (usb_init() < 0) {
         return _error(usb, USB_ERROR_OPEN, 0, "USB not init");
     }
@@ -168,54 +258,130 @@ printf("%x %x %s\n", vendor_id, product_id, path);
 	}
 
 	if (found) {
-        if (path == NULL) {
-            r = libusb_open(found, &dev_handle);
-            if (r < 0)
-                dev_handle = NULL;
-        } else {
-            struct libusb_config_descriptor *conf_desc = NULL;
-            r = libusb_get_active_config_descriptor(dev, &conf_desc);
-            if (r < 0)
-                libusb_get_config_descriptor(dev, 0, &conf_desc);
-            if (conf_desc) {
-                int j,k;
-                for (j = 0; j < conf_desc->bNumInterfaces; j++) {
-                    const struct libusb_interface *intf = &conf_desc->interface[j];
-                    for (k = 0; k < intf->num_altsetting; k++) {
-                        const struct libusb_interface_descriptor *intf_desc;
-                        intf_desc = &intf->altsetting[k];
-                        char *tmp = make_path(dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
-                        printf("tmp:%s path=%s\n", tmp, path);
-                        if (!strncmp(path, tmp, strlen(path))) {
-                            r = libusb_open(found, &usb->dev_handle);
-                            if (r < 0) {
-                                usb->dev_handle = NULL;
-                            } else {
-                                usb->config_number = conf_desc->bConfigurationValue;
-                                usb->interface = intf_desc->bInterfaceNumber;
-                            }
-                            free(tmp);
+        struct libusb_config_descriptor *conf_desc = NULL;
+        r = libusb_get_active_config_descriptor(dev, &conf_desc);
+        if (r < 0)
+            libusb_get_config_descriptor(dev, 0, &conf_desc);
+        if (conf_desc) {
+            int j,k;
+            for (j = 0; j < conf_desc->bNumInterfaces; j++) {
+                const struct libusb_interface *intf = &conf_desc->interface[j];
+                for (k = 0; k < intf->num_altsetting; k++) {
+                    const struct libusb_interface_descriptor *intf_desc;
+                    intf_desc = &intf->altsetting[k];
+                    get_path(&usb->path, dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
+                    if (!path || !strncmp(path, usb->path, strlen(path))) {
+                        r = libusb_open(found, &usb->device_handle);
+                        if (r < 0) {
                             break;
                         }
-                        free(tmp);
-                    } /* altsettings */
-                } /* interfaces */
-                libusb_free_config_descriptor(conf_desc);
-            }
+                        good_open = usb_initialize_device(usb, intf_desc);
+                        if (!good_open)
+                            libusb_close(usb->device_handle);
+                    }
+                } /* altsettings */
+            } /* interfaces */
+            libusb_free_config_descriptor(conf_desc);
         }
 	}
 
 out:
 	libusb_free_device_list(devs, 1);
-	return usb->dev_handle != NULL ? 0:_error(usb, USB_ERROR_OPEN, 0, "Openning usb device");;
+	return good_open == 1 ? 0:_error(usb, USB_ERROR_OPEN, 0, "Openning usb device");;
 }
 
 int usb_close(usb_t *usb)
 {                                  
-    libusb_close(usb->dev_handle);
+    libusb_close(usb->device_handle);
 }
 
-struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id)
+int usb_hid_write(usb_t *usb, const unsigned char *data, size_t length)
+{
+	int res;
+	int report_number;
+	int skipped_report_id = 0;
+
+	if (!data || (length ==0)) {
+		return -1;
+	}
+
+	report_number = data[0];
+
+	if (report_number == 0x0) {
+		data++;
+		length--;
+		skipped_report_id = 1;
+	}
+
+	if (usb->output_endpoint <= 0) {
+		/* No interrupt out endpoint. Use the Control Endpoint */
+		res = libusb_control_transfer(usb->device_handle,
+			LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE|LIBUSB_ENDPOINT_OUT,
+			0x09/*HID Set_Report*/,
+			htole16((HID_OUTPUT_REPORT/*HID output*/ << 8) | report_number),
+			htole16(usb->interface),
+			(unsigned char *)data, length,
+			1000/*timeout millis*/);
+
+		if (res < 0)
+			return -1;
+
+		if (skipped_report_id)
+			length++;
+
+		return length;
+	} else {
+		/* Use the interrupt out endpoint */
+		int actual_length;
+		res = libusb_interrupt_transfer(usb->device_handle,
+			usb->output_endpoint,
+			(unsigned char*)data,
+			length,
+			&actual_length, 1000);
+
+		if (res < 0)
+			return -1;
+
+		if (skipped_report_id)
+			actual_length++;
+
+		return actual_length;
+	}
+}
+
+
+int usb_hid_get_input_report(usb_t *usb, unsigned char *data, size_t length)
+{
+	int res = -1;
+	int skipped_report_id = 0;
+	int report_number = data[0];
+
+	if (report_number == 0x0) {
+		/* Offset the return buffer by 1, so that the report ID
+		   will remain in byte 0. */
+		data++;
+		length--;
+		skipped_report_id = 1;
+	}
+
+	res = libusb_control_transfer(usb->device_handle,
+		LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE|LIBUSB_ENDPOINT_IN,
+		0x01/*HID get_report*/,
+		htole16((HID_INPUT_REPORT/*HID Input*/ << 8) | report_number),
+		htole16(usb->interface),
+		(unsigned char *)data, length,
+		5000/*timeout millis*/);
+
+	if (res < 0)
+		return -1;
+
+	if (skipped_report_id)
+		res++;
+
+	return res;
+}
+
+struct usb_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id)
 {
 	libusb_device **devs;
 	libusb_device *dev;
@@ -223,8 +389,8 @@ struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16
 	ssize_t num_devs;
 	int i = 0;
 
-	struct hid_device_info *root = NULL; /* return object */
-	struct hid_device_info *cur_dev = NULL;
+	struct usb_device_info *root = NULL; /* return object */
+	struct usb_device_info *cur_dev = NULL;
 
 	if(usb_init() < 0)
 		return NULL;
@@ -255,24 +421,21 @@ struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16
 				for (k = 0; k < intf->num_altsetting; k++) {
 					const struct libusb_interface_descriptor *intf_desc;
 					intf_desc = &intf->altsetting[k];
-					if (intf_desc->bInterfaceClass == LIBUSB_CLASS_HID) {
-						struct hid_device_info *tmp;
+                    struct usb_device_info *tmp;
+                    res = libusb_open(dev, &handle);
+                    tmp = create_device_info_for_device(dev, handle, &desc, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
+                    if (tmp) {
+                        if (cur_dev) {
+                            cur_dev->next = tmp;
+                        }
+                        else {
+                            root = tmp;
+                        }
+                        cur_dev = tmp;
+                    }
 
-						res = libusb_open(dev, &handle);
-						tmp = create_device_info_for_device(dev, handle, &desc, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
-						if (tmp) {
-							if (cur_dev) {
-								cur_dev->next = tmp;
-							}
-							else {
-								root = tmp;
-							}
-							cur_dev = tmp;
-						}
-
-						if (res >= 0)
-							libusb_close(handle);
-					}
+                    if (res >= 0)
+                        libusb_close(handle);
 				} /* altsettings */
 			} /* interfaces */
 			libusb_free_config_descriptor(conf_desc);
@@ -283,11 +446,11 @@ struct hid_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16
 	return root;
 }
 
-void usb_hid_free_enumeration(usb_t *usb, struct hid_device_info *devs)
+void usb_hid_free_enumeration(usb_t *usb, struct usb_device_info *devs)
 {
-	struct hid_device_info *d = devs;
+	struct usb_device_info *d = devs;
 	while (d) {
-		struct hid_device_info *next = d->next;
+		struct usb_device_info *next = d->next;
 		free(d->path);
 		free(d);
 		d = next;
