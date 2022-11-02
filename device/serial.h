@@ -44,7 +44,7 @@ int serial_open_advanced(serial_t *serial, const char *path,
                          uint32_t baudrate, unsigned int databits,
                          serial_parity_t parity, unsigned int stopbits,
                          bool xonxoff, bool rtscts);
-int serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms);
+ssize_t serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms);
 ssize_t serial_write(serial_t *serial, const uint8_t *buf, size_t len);
 ssize_t serial_write_sync(serial_t *serial, const uint8_t *buf, size_t len);
 int serial_flush(serial_t *serial);

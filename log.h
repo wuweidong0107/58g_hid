@@ -6,6 +6,12 @@
 #include <stdbool.h>
 #include <time.h>
 
+#ifdef DEBUG_PRINTF
+#define DBG(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define DBG(...) do {} while (0)
+#endif
+
 #define LOG_VERSION "0.1.0"
 
 typedef struct {

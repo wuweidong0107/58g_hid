@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <libusb-1.0/libusb.h>
+#include "list.h"
 
 typedef struct usb_handle usb_t;
 
@@ -25,11 +26,21 @@ struct usb_device_info {
 
 enum usb_error_code {
     USB_ERROR_ARG            = -1, /* Invalid arguments */
-    USB_ERROR_OPEN           = -2, /* Opening usb device */
+    USB_ERROR_OPEN                            = -2, /* Opening usb device */
     USB_ERROR_QUERY          = -3, /* Querying usb device attributes */
     USB_ERROR_CONFIGURE      = -4, /* Configuring usb device attributes */
     USB_ERROR_IO             = -5, /* Reading/writing usb device */
     USB_ERROR_CLOSE          = -6, /* Closing usb device */
+};
+
+struct usb_client_ops {
+    int (*on_hid_get_input_report)(const uint8_t *buf, size_t len);
+};
+
+struct usb_client {
+    char name[64];
+    struct usb_client_ops *ops;
+    struct list_head list;
 };
 
 typedef struct usb_options {
@@ -44,6 +55,10 @@ usb_t *usb_new(void);
 void usb_free(usb_t *usb);
 int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *path);
 int usb_close(usb_t *usb);
+int usb_hid_write(usb_t *usb, const const uint8_t *data, size_t length, int timeout_ms);
+int usb_hid_get_input_report(usb_t *usb, uint8_t *data, size_t length, int timeout_ms);
 struct usb_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id);
 void usb_hid_free_enumeration(usb_t *usb, struct usb_device_info *devs);
+
+int usb_add_client(usb_t *usb, struct usb_client *client);
 #endif

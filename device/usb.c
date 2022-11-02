@@ -8,9 +8,21 @@
 #define HID_OUTPUT_REPORT	2
 #define HID_FEATURE_REPORT	3
 
+// HID Class-Specific Requests values. See section 7.2 of the HID specifications
+#define HID_GET_REPORT                0x01
+#define HID_GET_IDLE                  0x02
+#define HID_GET_PROTOCOL              0x03
+#define HID_SET_REPORT                0x09
+#define HID_SET_IDLE                  0x0A
+#define HID_SET_PROTOCOL              0x0B
+#define HID_REPORT_TYPE_INPUT         0x01
+#define HID_REPORT_TYPE_OUTPUT        0x02
+#define HID_REPORT_TYPE_FEATURE       0x03
+
 static libusb_context *usb_context = NULL;
 
 struct usb_handle {
+    struct list_head list;
     char ident[64];
     libusb_context *context;
     libusb_device *usb_dev;
@@ -31,7 +43,7 @@ struct usb_handle {
 	int serial_index;
 
     int is_driver_detached;
-
+    struct list_head clients;
     struct {
         int c_errno;
         char errmsg[256];
@@ -146,6 +158,7 @@ usb_t *usb_new(void)
         return NULL;
 
     usb->context = usb_context;
+    INIT_LIST_HEAD(&usb->clients);
     return usb;
 }
 
@@ -166,7 +179,8 @@ static int usb_initialize_device(usb_t *usb, const struct libusb_interface_descr
 	usb->is_driver_detached = 0;
 	if (libusb_kernel_driver_active(usb->device_handle, intf_desc->bInterfaceNumber) == 1) {
 		res = libusb_detach_kernel_driver(usb->device_handle, intf_desc->bInterfaceNumber);
-		if (res < 0) {
+        log_error("res=%d\n", res);
+        if (res < 0) {
 			return 0;
 		} else {
 			usb->is_driver_detached = 1;
@@ -174,6 +188,7 @@ static int usb_initialize_device(usb_t *usb, const struct libusb_interface_descr
 	}
 
 	res = libusb_claim_interface(usb->device_handle, intf_desc->bInterfaceNumber);
+    log_error("res=%d\n", res);
 	if (res < 0) {
 		if (usb->is_driver_detached) {
 			libusb_attach_kernel_driver(usb->device_handle, intf_desc->bInterfaceNumber);
@@ -270,12 +285,15 @@ int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *pa
                     const struct libusb_interface_descriptor *intf_desc;
                     intf_desc = &intf->altsetting[k];
                     get_path(&usb->path, dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
+                    printf("path=%s usb->path=%s\n", path, usb->path);
                     if (!path || !strncmp(path, usb->path, strlen(path))) {
                         r = libusb_open(found, &usb->device_handle);
+                        printf("r=%d\n", r);
                         if (r < 0) {
                             break;
                         }
                         good_open = usb_initialize_device(usb, intf_desc);
+                        printf("good_open=%d\n", good_open);
                         if (!good_open)
                             libusb_close(usb->device_handle);
                     }
@@ -295,7 +313,7 @@ int usb_close(usb_t *usb)
     libusb_close(usb->device_handle);
 }
 
-int usb_hid_write(usb_t *usb, const unsigned char *data, size_t length)
+int usb_hid_write(usb_t *usb, const const uint8_t *data, size_t length, int timeout_ms)
 {
 	int res;
 	int report_number;
@@ -317,11 +335,11 @@ int usb_hid_write(usb_t *usb, const unsigned char *data, size_t length)
 		/* No interrupt out endpoint. Use the Control Endpoint */
 		res = libusb_control_transfer(usb->device_handle,
 			LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE|LIBUSB_ENDPOINT_OUT,
-			0x09/*HID Set_Report*/,
+			HID_SET_REPORT,
 			htole16((HID_OUTPUT_REPORT/*HID output*/ << 8) | report_number),
 			htole16(usb->interface),
 			(unsigned char *)data, length,
-			1000/*timeout millis*/);
+			timeout_ms);
 
 		if (res < 0)
 			return -1;
@@ -349,8 +367,7 @@ int usb_hid_write(usb_t *usb, const unsigned char *data, size_t length)
 	}
 }
 
-
-int usb_hid_get_input_report(usb_t *usb, unsigned char *data, size_t length)
+int usb_hid_get_input_report(usb_t *usb, uint8_t *data, size_t length, int timeout_ms)
 {
 	int res = -1;
 	int skipped_report_id = 0;
@@ -370,7 +387,7 @@ int usb_hid_get_input_report(usb_t *usb, unsigned char *data, size_t length)
 		htole16((HID_INPUT_REPORT/*HID Input*/ << 8) | report_number),
 		htole16(usb->interface),
 		(unsigned char *)data, length,
-		5000/*timeout millis*/);
+		timeout_ms);
 
 	if (res < 0)
 		return -1;
@@ -378,6 +395,11 @@ int usb_hid_get_input_report(usb_t *usb, unsigned char *data, size_t length)
 	if (skipped_report_id)
 		res++;
 
+    struct usb_client *client;
+	list_for_each_entry(client, &usb->clients, list) {
+        if (client->ops->on_hid_get_input_report)
+            client->ops->on_hid_get_input_report(data, length);
+	}
 	return res;
 }
 
@@ -457,65 +479,6 @@ void usb_hid_free_enumeration(usb_t *usb, struct usb_device_info *devs)
 	}
 }
 
-#if 0
-int usb_hid_open_path(usb_t *usb, const char *path, int *config_number, struct libusb_interface_descriptor *intf_desc)
-{
-	libusb_device **devs = NULL;
-	libusb_device *usb_dev = NULL;
-	int res = 0;
-	int d = 0;
-	int good_open = 0;
-
-	if(usb_init() < 0)
-		return NULL;
-
-	libusb_get_device_list(usb_context, &devs);
-	while ((usb_dev = devs[d++]) != NULL && !good_open) {
-		struct libusb_config_descriptor *conf_desc = NULL;
-		int j,k;
-
-		if (libusb_get_active_config_descriptor(usb_dev, &conf_desc) < 0)
-			continue;
-		for (j = 0; j < conf_desc->bNumInterfaces && !good_open; j++) {
-			const struct libusb_interface *intf = &conf_desc->interface[j];
-			for (k = 0; k < intf->num_altsetting && !good_open; k++) {
-				const struct libusb_interface_descriptor *intf_desc = &intf->altsetting[k];
-				if (intf_desc->bInterfaceClass == LIBUSB_CLASS_HID) {
-					char dev_path[64];
-					get_path(&dev_path, usb_dev, conf_desc->bConfigurationValue, intf_desc->bInterfaceNumber);
-					if (!strcmp(dev_path, path)) {
-						/* Matched Paths. Open this device */
-
-						/* OPEN HERE */
-						res = libusb_open(usb_dev, &dev->device_handle);
-						if (res < 0) {
-							LOG("can't open device\n");
-							break;
-						}
-						good_open = hidapi_initialize_device(dev, conf_desc->bConfigurationValue, intf_desc);
-						if (!good_open)
-							libusb_close(dev->device_handle);
-					}
-				}
-			}
-		}
-		libusb_free_config_descriptor(conf_desc);
-	}
-
-	libusb_free_device_list(devs, 1);
-
-	/* If we have a good handle, return it. */
-	if (good_open) {
-		return dev;
-	}
-	else {
-		/* Unable to open any devices. */
-		free_hid_device(dev);
-		return NULL;
-	}
-}
-#endif
-
 const char *usb_errmsg(usb_t *usb)
 {
     return usb->error.errmsg;
@@ -524,4 +487,17 @@ const char *usb_errmsg(usb_t *usb)
 int usb_errno(usb_t *usb)
 {
     return usb->error.c_errno;
+}
+
+int usb_add_client(usb_t *usb, struct usb_client *client)
+{
+    if (!client || !client->ops)
+        return -1;
+    list_add_tail(&client->list, &usb->clients);
+    return 0;
+}
+
+void usb_remove_client(usb_t *usb, struct usb_client *client)
+{
+    list_del(&client->list);
 }

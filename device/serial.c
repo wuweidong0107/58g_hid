@@ -326,14 +326,15 @@ int serial_open_advanced(serial_t *serial, const char *path, uint32_t baudrate, 
     return 0;
 }
 
-int serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms) {
+ssize_t serial_read(serial_t *serial, uint8_t *buf, size_t len, int timeout_ms)
+{
     ssize_t ret;
 
     struct timeval tv_timeout;
     tv_timeout.tv_sec = timeout_ms / 1000;
     tv_timeout.tv_usec = (timeout_ms % 1000) * 1000;
 
-    size_t bytes_read = 0;
+    ssize_t bytes_read = 0;
 
     while (bytes_read < len) {
         fd_set rfds;

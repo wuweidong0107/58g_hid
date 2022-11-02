@@ -63,6 +63,7 @@ static command_t commands[] = {
     { "serial_list", cmd_serial_list, "List all serial device" },
     { "serial_send <index> <data1 data2 ...>", cmd_serial_send, "Send hex data by serial" },
     { "usb_hid_list", cmd_usb_hid_list, "List all usb hid device" },
+    { "usb_test", cmd_usb_test, "usb test" },
     //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
@@ -485,15 +486,17 @@ int cmd_serial_send(int argc, char *argv[])
     return 0;
 }
 
-static void print_device(struct hid_device_info *cur_dev)
+static void print_device(struct usb_device_info *cur_dev)
 {
-	shell_printf("Device Found\n");
-    shell_printf("  type: %04hx %04hx\n  path: %s\n", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+	shell_printf("Device Found:\n");
+    shell_printf("  Type:         0x%04hx 0x%04hx\n  path: %s\n", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+    shell_printf("  Manufacturer: %s\n",  cur_dev->manufacturer_string);
+    shell_printf("  Product:      %s\n",  cur_dev->product_string);
 	shell_printf("  Interface:    %d\n",  cur_dev->interface_number);
     shell_printf("\n");
 }
 
-static void print_devices(struct hid_device_info *cur_dev)
+static void print_devices(struct usb_device_info *cur_dev)
 {
 	while (cur_dev) {
 		print_device(cur_dev);
@@ -505,18 +508,54 @@ int cmd_usb_hid_list(int argc, char *argv[])
 {
     usb_t *usb = get_usb(0);        // all usb device can do enumeration job
 
-    struct hid_device_info *devs;
+    struct usb_device_info *devs;
     devs = usb_hid_enumerate(usb, 0x0, 0x0);
 	print_devices(devs);
 	usb_hid_free_enumeration(usb, devs);
     return 0;
 }
 
+int cmd_usb_test(int argc, char *argv[])
+{
+    int index;
+    int i,len;
+
+    if (argc < 2)
+        return -EINVAL;
+
+    index = strtoul(argv[1], NULL, 10);
+    usb_t *usb = get_usb(index);
+    if (usb == NULL)
+        return -EINVAL;
+    uint8_t data[257] = {0x0, 0x06, 0x55, 0xAA, 0x80, 0x01, 0xA1, 0x20};
+    usb_hid_write(usb, data, 8, 5);
+    usb_hid_get_input_report(usb, data, 257, 5);
+    return 0;
+}
+
+static int menu_on_hid_get_input_report(const uint8_t *buf, size_t len)
+{
+    int i;
+    for(i=0; i<buf[0]; i++) {
+        shell_printf("%d:%x\n", i, buf[i]);
+    }
+}
+
+static struct usb_client_ops usb_client_menu_ops = {
+    .on_hid_get_input_report = menu_on_hid_get_input_report,
+};
+
+static struct usb_client usb_client_menu = {
+    .name = "menu",
+    .ops = &usb_client_menu_ops,
+};
+
 void menu_init(void)
 {
     int i;
     aw5808_t *aw;
     serial_t *serial;
+    usb_t *usb;
 
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
         aw5808_set_cbs(aw, &aw5808_menu_cbs);
@@ -524,5 +563,9 @@ void menu_init(void)
 
     for (i=0; (serial=get_serial(i)) != NULL; i++) {
         serial_set_cbs(serial, &serial_menu_cbs);
+    }
+
+    for (i=0; (usb=get_usb(i)) != NULL; i++) {
+        usb_add_client(usb, &usb_client_menu);
     }
 }
