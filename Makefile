@@ -26,16 +26,11 @@ export TOPDIR
 
 TARGET := devctl
 
+obj-y += common/
+obj-y += device/
 obj-y += main.o
 obj-y += menu.o
-obj-y += log.o
-obj-y += stdstring.o
-obj-y += iobuf.o
-obj-y += thpool.o
-obj-y += stdstring.o
 obj-y += codec.o
-obj-y += ini.o
-obj-y += device/
 
 all : 
 	make -C ./ -f $(TOPDIR)/Makefile.build
