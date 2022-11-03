@@ -763,15 +763,19 @@ const char* serial_id(serial_t *serial)
 {
     return serial->ident;
 }
-const char *serial_errmsg(serial_t *serial) {
+
+const char *serial_errmsg(serial_t *serial)
+{
     return serial->error.errmsg;
 }
 
-int serial_errno(serial_t *serial) {
+int serial_errno(serial_t *serial)
+{
     return serial->error.c_errno;
 }
 
-int serial_fd(serial_t *serial) {
+int serial_fd(serial_t *serial)
+{
     return serial->fd;
 }
 

@@ -15,138 +15,15 @@
 #include "device.h"
 #include "stdstring.h"
 
-extern struct ev_loop *loop;
-
-/*
-void task_58g_readfw_handler(void *arg)
-{
-    aw5808_t *aw = (aw5808_t *) arg;
-    uint8_t buf[2];
-    
-    aw5808_lock(aw);
-    if (aw5808_read_fw(aw, buf, sizeof(buf)/sizeof(buf[0]), 10) == 2)
-        shell_printf("fimware version: %02x %02x\n",buf[0], buf[1]);
-    aw5808_unlock(aw);
-}
-*/
+typedef int (*cmd_fn_t)(int argc, char *argv[]);
+typedef struct {
+    const char *name;
+    cmd_fn_t func;
+    const char *doc;
+} command_t;
 
 static command_t commands[];
-static int cmd_help(int argc, char *argv[])
-{
-    int i=0;
-    printf("Avaliable command:\n");
-    for (; commands[i].name; i++) {
-        char *tokens[1];
-        string_split(commands[i].name, "_", tokens, 1);
-        if ((!strncmp("aw5808", tokens[0], strlen("aw5808")) && get_aw5808(0) == NULL) 
-            || (!strncmp("serial", tokens[0],strlen("serial")) && get_serial(0) == NULL)) {
-            free(tokens[0]);
-        } else {
-            free(tokens[0]);
-            printf("\t%-40s %s\n", commands[i].name, commands[i].doc);
-        }
-    }
-    printf("Exit by Ctrl+D.\n");
-    return 0;
-}
-
-static command_t commands[] = {
-    { "aw5808_list", cmd_aw5808_list, "List all aw5808 device" },
-    { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
-    { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
-    { "aw5808_pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
-    { "aw5808_setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
-    { "aw5808_seti2smode [index] <master|slave>", cmd_aw5808_set_i2s_mode, "Set aw5808 i2s mode" },
-    { "aw5808_setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
-    { "aw5808_setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
-    { "aw5808_setrfpower [index] <1-16>", cmd_aw5808_set_rfpower, "Set aw5808 RF power" },
-    { "serial_list", cmd_serial_list, "List all serial device" },
-    { "serial_send <index> <data1 data2 ...>", cmd_serial_send, "Send hex data by serial" },
-    { "usb_hid_list", cmd_usb_hid_list, "List all usb hid device" },
-    { "usb_test", cmd_usb_test, "usb test" },
-    //{ "readid [index]", cmd_58g_read_id, "Read 5.8g operated ID" },
-    { "help", cmd_help, "Disply help info" },
-    { NULL, NULL, NULL},
-};
-
-static command_t *find_command(const char *name)
-{
-    int i;
-
-    for (i=0; commands[i].name; i++) {
-        char *tokens[2];
-        size_t count;
-        count = string_split(commands[i].name, " ", tokens, 2);
-        if(strcmp(name, tokens[0]) == 0)
-            return (&commands[i]);
-        
-        for(int j=0; j<count; j++)
-            free(tokens[j]);
-    }
-
-    return NULL;
-}
-
-void shell_set_prompt(const char *string)
-{
-	rl_set_prompt(string);
-	rl_redisplay();
-}
-
-void shell_printf(const char *fmt, ...)
-{
-	va_list args;
-	bool save_input;
-	char *saved_line;
-	int saved_point;
-
-	save_input = !RL_ISSTATE(RL_STATE_DONE);
-	if (save_input) {
-		saved_point = rl_point;
-		saved_line = rl_copy_text(0, rl_end);
-		rl_save_prompt();
-		rl_replace_line("", 0);
-		rl_redisplay();
-	}
-
-	va_start(args, fmt);
-	vprintf(fmt, args);
-	va_end(args);
-
-	if (save_input) {
-		rl_restore_prompt();
-		rl_replace_line(saved_line, 0);
-		rl_point = saved_point;
-		rl_forced_update_display();
-		free(saved_line);
-	}
-}
-
-void shell_exec(int argc, char *argv[])
-{
-    int ret;
-    command_t *cmd = find_command(argv[0]);
-    if (cmd) {
-        ret = cmd->func(argc, argv);
-        switch(ret) {
-            case 0:
-                break;
-            case -ENOENT: 
-                shell_printf("Unkown command!\n");
-                cmd_help(0, NULL);
-                break;
-            case -EINVAL:
-                shell_printf("Invalid command param\n");
-                cmd_help(0, NULL);
-                break;
-            default:
-                shell_printf("Command exec fail, ret=%d\n", ret);
-        }
-        return;
-    }
-    cmd_help(0, NULL);
-    return;
-}
+static void shell_printf(const char *fmt, ...);
 
 static void on_aw5808_get_config(aw5808_t *aw, const uint8_t *data, int len)
 {
@@ -244,7 +121,7 @@ static struct aw5808_cbs aw5808_menu_cbs = {
     .on_set_rfpower = on_aw5808_set_rfpower,
 };
 
-int cmd_aw5808_list(int argc, char *argv[])
+static int cmd_aw5808_list(int argc, char *argv[])
 {
     int i;
     aw5808_t *aw;
@@ -461,7 +338,7 @@ int cmd_serial_list(int argc, char *argv[])
     return 0;
 }
 
-int cmd_serial_send(int argc, char *argv[])
+int cmd_serial_write(int argc, char *argv[])
 {
     int index;
     uint8_t data[128];
@@ -477,7 +354,7 @@ int cmd_serial_send(int argc, char *argv[])
 
     for (i=2, len=0; i<argc && len<128; i++, len++) {
         data[len] = strtoul(argv[i], NULL, 16);
-        printf("%d:%x\n", len, data[len]);
+        shell_printf("%d:%x\n", len, data[len]);
     }
     len = len + 1;
     if (serial_write(serial, data, len) != len)
@@ -486,39 +363,36 @@ int cmd_serial_send(int argc, char *argv[])
     return 0;
 }
 
-static void print_device(struct usb_device_info *cur_dev)
-{
-	shell_printf("Device Found:\n");
-    shell_printf("  Type:         0x%04hx 0x%04hx\n  path: %s\n", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
-    shell_printf("  Manufacturer: %s\n",  cur_dev->manufacturer_string);
-    shell_printf("  Product:      %s\n",  cur_dev->product_string);
-	shell_printf("  Interface:    %d\n",  cur_dev->interface_number);
-    shell_printf("\n");
-}
-
-static void print_devices(struct usb_device_info *cur_dev)
-{
-	while (cur_dev) {
-		print_device(cur_dev);
-		cur_dev = cur_dev->next;
-	}
-}
-
-int cmd_usb_hid_list(int argc, char *argv[])
+static int cmd_usb_hid_list(int argc, char *argv[])
 {
     usb_t *usb = get_usb(0);        // all usb device can do enumeration job
 
     struct usb_device_info *devs;
+    struct usb_device_info *cur_dev;
     devs = usb_hid_enumerate(usb, 0x0, 0x0);
-	print_devices(devs);
-	usb_hid_free_enumeration(usb, devs);
+    cur_dev = devs;
+    while (cur_dev) {
+        shell_printf("Device Found:\n");
+        shell_printf("  Type:         0x%04hx 0x%04hx\n  path: %s\n", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+        shell_printf("  Manufacturer: %s\n",  cur_dev->manufacturer_string);
+        shell_printf("  Product:      %s\n",  cur_dev->product_string);
+        shell_printf("  Interface:    %d\n",  cur_dev->interface_number);
+        shell_printf("\n");
+        cur_dev = cur_dev->next;
+    }
+    usb_hid_free_enumeration(usb, devs);
     return 0;
 }
 
-int cmd_usb_test(int argc, char *argv[])
+/*
+ * exmaple: usb_hid_write 0 0x0 0x06 0x55 0xAA 0x80 0x01 0xA1 0x20
+ */
+static int cmd_usb_hid_write(int argc, char *argv[])
 {
     int index;
+    uint8_t data[257];
     int i,len;
+    int timeout_ms = 5;
 
     if (argc < 2)
         return -EINVAL;
@@ -527,28 +401,147 @@ int cmd_usb_test(int argc, char *argv[])
     usb_t *usb = get_usb(index);
     if (usb == NULL)
         return -EINVAL;
-    uint8_t data[257] = {0x0, 0x06, 0x55, 0xAA, 0x80, 0x01, 0xA1, 0x20};
-    usb_hid_write(usb, data, 8, 5);
-    usb_hid_get_input_report(usb, data, 257, 5);
+
+    for (i=2, len=0; i<argc && len<sizeof(data); i++, len++) {
+        data[len] = strtoul(argv[i], NULL, 16);
+    }
+    len = len + 1;
+    if (usb_hid_write(usb, data, len, timeout_ms) != len)
+        log_info("%s", usb_errmsg(usb));
+    
+    usb_hid_get_input_report(usb, data, sizeof(data), timeout_ms);
     return 0;
 }
 
-static int menu_on_hid_get_input_report(const uint8_t *buf, size_t len)
+static int on_hid_get_input_report(const uint8_t *buf, size_t len)
 {
     int i;
+    shell_printf("Got:\n");
     for(i=0; i<buf[0]; i++) {
-        shell_printf("%d:%x\n", i, buf[i]);
+        shell_printf("%02x ", buf[i]);
+    }
+    shell_printf("\n");
+    return 0;
+}
+
+static struct usb_client_ops usb_menu_ops = {
+    .on_get_input_report = on_hid_get_input_report,
+};
+
+static struct usb_client usb_menu = {
+    .name = "menu",
+    .ops = &usb_menu_ops,
+};
+
+static int cmd_help(int argc, char *argv[])
+{
+    int i=0;
+    shell_printf("Avaliable command:\n");
+    for (; commands[i].name; i++) {
+        char *tokens[1];
+        string_split(commands[i].name, "_", tokens, 1);
+        if ((!strncmp("aw5808", tokens[0], strlen("aw5808")) && get_aw5808(0) == NULL) 
+            || (!strncmp("serial", tokens[0],strlen("serial")) && get_serial(0) == NULL)) {
+            free(tokens[0]);
+        } else {
+            free(tokens[0]);
+            shell_printf("\t%-40s %s\n", commands[i].name, commands[i].doc);
+        }
+    }
+    shell_printf("Exit by Ctrl+D.\n");
+    return 0;
+}
+
+static command_t commands[] = {
+    { "aw5808_list", cmd_aw5808_list, "List available aw5808 device" },
+    { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
+    { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
+    { "aw5808_pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
+    { "aw5808_setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
+    { "aw5808_seti2smode [index] <master|slave>", cmd_aw5808_set_i2s_mode, "Set aw5808 i2s mode" },
+    { "aw5808_setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
+    { "aw5808_setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
+    { "aw5808_setrfpower [index] <1-16>", cmd_aw5808_set_rfpower, "Set aw5808 RF power" },
+    { "serial_list", cmd_serial_list, "List available serial device" },
+    { "serial_write <index> <data1 data2 ...>", cmd_serial_write, "Send hex data by serial" },
+    { "usb_hid_list", cmd_usb_hid_list, "List all usb hid device" },
+    { "usb_hid_write <index> <data1 data2 ...>", cmd_usb_hid_write, "Send hex data by usbhid" },
+    { "help", cmd_help, "Disply help info" },
+    { NULL, NULL, NULL},
+};
+
+static void shell_printf(const char *fmt, ...)
+{
+    va_list args;
+    bool save_input;
+    char *saved_line;
+    int saved_point;
+
+    save_input = !RL_ISSTATE(RL_STATE_DONE);
+    if (save_input) {
+        saved_point = rl_point;
+        saved_line = rl_copy_text(0, rl_end);
+        rl_save_prompt();
+        rl_replace_line("", 0);
+        rl_redisplay();
+    }
+
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+
+    if (save_input) {
+        rl_restore_prompt();
+        rl_replace_line(saved_line, 0);
+        rl_point = saved_point;
+        rl_forced_update_display();
+        free(saved_line);
     }
 }
 
-static struct usb_client_ops usb_client_menu_ops = {
-    .on_hid_get_input_report = menu_on_hid_get_input_report,
-};
+static command_t *shell_find_command(const char *name)
+{
+    int i;
 
-static struct usb_client usb_client_menu = {
-    .name = "menu",
-    .ops = &usb_client_menu_ops,
-};
+    for (i=0; commands[i].name; i++) {
+        char *tokens[2];
+        size_t count;
+        count = string_split(commands[i].name, " ", tokens, 2);
+        if(strcmp(name, tokens[0]) == 0)
+            return (&commands[i]);
+        
+        for(int j=0; j<count; j++)
+            free(tokens[j]);
+    }
+
+    return NULL;
+}
+
+void shell_exec(int argc, char *argv[])
+{
+    int ret;
+    command_t *cmd = shell_find_command(argv[0]);
+    if (cmd) {
+        ret = cmd->func(argc, argv);
+        switch(ret) {
+            case 0:
+                break;
+            case -ENOENT: 
+                shell_printf("Unkown command!\n");
+                cmd_help(0, NULL);
+                break;
+            case -EINVAL:
+                shell_printf("Invalid command param\n");
+                cmd_help(0, NULL);
+                break;
+            default:
+                shell_printf("Command exec fail, ret=%d\n", ret);
+        }
+        return;
+    }
+    cmd_help(0, NULL);
+    return;
+}
 
 void menu_init(void)
 {
@@ -566,6 +559,6 @@ void menu_init(void)
     }
 
     for (i=0; (usb=get_usb(i)) != NULL; i++) {
-        usb_add_client(usb, &usb_client_menu);
+        usb_add_client(usb, &usb_menu);
     }
 }

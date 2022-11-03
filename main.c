@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
     menu_init();
     fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
     rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
-    shell_set_prompt(PROMPT_ON);
+    rl_set_prompt(PROMPT_ON);
     ev_run(loop, 0);
 
     /* cleanup */
