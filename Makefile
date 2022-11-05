@@ -15,7 +15,7 @@ export AS LD CC CPP AR NM
 export STRIP OBJCOPY OBJDUMP
 
 CFLAGS := -Wall -O2 -g
-CFLAGS += -I$(shell pwd)/ -I$(shell pwd)/include -I$(shell pwd)/device
+CFLAGS += -I$(shell pwd)/ -I$(shell pwd)/include -I$(shell pwd)/device -I$(shell pwd)/codec/
 
 LDFLAGS := -lreadline -lpthread -lev -ludev -lusb-1.0
 
@@ -28,9 +28,9 @@ TARGET := devctl
 
 obj-y += common/
 obj-y += device/
+obj-y += codec/
 obj-y += main.o
 obj-y += menu.o
-obj-y += codec.o
 
 all : 
 	make -C ./ -f $(TOPDIR)/Makefile.build

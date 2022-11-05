@@ -1,0 +1,10 @@
+- 将 usb_hid_write 放入线程池中;
+- gpio
+- input
+- wifi
+- bt
+- pwm
+- Thermal
+- cpufreq
+- mmio
+- led

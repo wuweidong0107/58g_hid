@@ -143,6 +143,6 @@ int main(int argc, char *argv[])
     ev_io_stop(loop, &stdin_watcher);
     ev_loop_destroy(loop);
     thpool_wait(thpool);
-	thpool_destroy(thpool);
+    thpool_destroy(thpool);
     log_info("Bye!");
 }

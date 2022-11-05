@@ -4,18 +4,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-enum {
-    PREAMBLE_AW5808_SERIAL = 0x55,
-    DELIMITER_AW5808_SERIAL = 0xAA,
-};
-
-struct protocol_head_aw5080_serial {
-    uint8_t preamble;
-    uint8_t delimiter;
-    uint8_t payload_length;
-    uint8_t data[0];
-};
-
 typedef struct codec
 {
     const char *ident;

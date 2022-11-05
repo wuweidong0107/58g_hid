@@ -1,7 +1,18 @@
 #include <stdio.h>
 #include <string.h>
 #include "codec.h"
-#include "log.h"
+
+enum {
+    PREAMBLE_AW5808_SERIAL = 0x55,
+    DELIMITER_AW5808_SERIAL = 0xAA,
+};
+
+struct protocol_head_aw5080_serial {
+    uint8_t preamble;
+    uint8_t delimiter;
+    uint8_t payload_length;
+    uint8_t data[0];
+};
 
 static size_t aw5808_serial_encode(uint8_t *frame, size_t data_len)
 {
@@ -43,64 +54,8 @@ static size_t aw5808_serial_decode(const uint8_t *frame, size_t length, const ui
     return frame_len;
 }
 
-static size_t aw5808_hid_encode(uint8_t *frame, size_t data_len)
-{
-    return 0;
-}
-
-static size_t aw5808_hid_decode(const uint8_t *frame, size_t length, const uint8_t **data, size_t *data_len)
-{
-
-    return 0;
-}
-
-static size_t uband_serial_encode(uint8_t *frame, size_t data_len)
-{
-    return 0;
-}
-
-static size_t uband_serial_decode(const uint8_t *frame, size_t length, const uint8_t **data, size_t *data_len)
-{
-
-    return 0;
-}
-
-static codec_t codec_aw5808_serial = {
+codec_t codec_aw5808_serial = {
    .ident = "aw5808_serial",
    .encode = aw5808_serial_encode,
    .decode = aw5808_serial_decode,
 };
-
-static codec_t codec_aw5808_hid = {
-   .ident = "aw5808_hid",
-   .encode = aw5808_hid_encode,
-   .decode = aw5808_hid_decode,
-};
-
-static codec_t codec_uband_serial = {
-   .ident = "uband_serial",
-   .encode = uband_serial_encode,
-   .decode = uband_serial_decode,
-};
-
-static codec_t *codecs[] = {
-    &codec_aw5808_serial,
-    &codec_aw5808_hid,
-    &codec_uband_serial,
-    NULL,
-};
-
-const codec_t *get_codec(const char *name)
-{
-    int i;
-
-    if (name == NULL)
-        return NULL;
-
-    for(i=0; codecs[i]; i++) {
-        if (!strncmp(name, codecs[i]->ident, strlen(name))) {
-            return codecs[i];
-        }
-    }
-    return NULL;
-}
