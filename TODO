@@ -1,4 +1,5 @@
-- 将 usb_hid_write 放入线程池中;
+- 将 usb_hid_write 放入线程池中 (OK);
+- 非交互模式;
 - gpio
 - input
 - wifi

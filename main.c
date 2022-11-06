@@ -15,6 +15,7 @@
 #include "thpool.h"
 #include "menu.h"
 
+threadpool thpool;
 static struct ev_loop *loop;
 static void process_line(char *line)
 {
@@ -82,8 +83,7 @@ int main(int argc, char *argv[])
 {
     int c, option_index = 0;
     char *log_file = NULL;
-    char *conf_file = "/etc/embdev.conf";
-    threadpool thpool;
+    char *conf_file = "/etc/devctl.conf";
 
     struct option long_options[] = {
         {"config", required_argument, 0, 'c'},
@@ -103,13 +103,11 @@ int main(int argc, char *argv[])
                 show_help();
                 return 0;
             case '?':
-                printf("unknown option: %c\n", optopt);
+                shell_printf("unknown option: %c\n", optopt);
                 return 1;
         }
     }
     logger_init(log_file, 0);
-    log_info("build time: %s %s\n", __DATE__, __TIME__);
-    log_info("config file: %s", conf_file);
 
     thpool = thpool_init(4);
     if (thpool == NULL) {
@@ -136,6 +134,8 @@ int main(int argc, char *argv[])
     fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
     rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
     rl_set_prompt(PROMPT_ON);
+    shell_printf("Build time: %s %s\n", __DATE__, __TIME__);
+    shell_printf("Config file: %s\n", conf_file);
     ev_run(loop, 0);
 
     /* cleanup */

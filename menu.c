@@ -22,9 +22,14 @@ typedef struct {
     const char *doc;
 } command_t;
 
-static command_t commands[];
-static void shell_printf(const char *fmt, ...);
+/* for thread job */
+struct cmd_context {
+    int argc;
+    char **argv;
+};
 
+extern threadpool thpool;
+static command_t commands[];
 static void on_aw5808_get_config(aw5808_t *aw, const uint8_t *data, int len)
 {
     shell_printf("5.8G firmware version: %x %x\n", data[1], data[2]);
@@ -384,43 +389,60 @@ static int cmd_usb_hid_list(int argc, char *argv[])
     return 0;
 }
 
-/*
- * exmaple: usb_hid_write 0 0x0 0x06 0x55 0xAA 0x80 0x01 0xA1 0x20
- */
-static int cmd_usb_hid_write(int argc, char *argv[])
+static void task_usb_hid_write(void *arg)
 {
+    struct cmd_context *ctx = (struct cmd_context *)arg;
+    if (ctx->argc < 2) {
+        log_error("invalid param");
+        goto cleanup;
+    }
+
     int index;
     uint8_t data[257];
     int i,len;
     int timeout_ms = 5;
 
-    if (argc < 2)
-        return -EINVAL;
-
-    index = strtoul(argv[1], NULL, 10);
+    index = strtoul(ctx->argv[1], NULL, 10);
     usb_t *usb = get_usb(index);
-    if (usb == NULL)
-        return -EINVAL;
-
-    for (i=2, len=0; i<argc && len<sizeof(data); i++, len++) {
-        data[len] = strtoul(argv[i], NULL, 16);
+    if (usb == NULL) {
+        log_error("getting usb handle");
+        goto cleanup;
+    }
+    for (i=2, len=0; i<ctx->argc && len<sizeof(data); i++, len++) {
+        data[len] = strtoul(ctx->argv[i], NULL, 16);
     }
     len = len + 1;
-    if (usb_hid_write(usb, data, len, timeout_ms) != len)
-        log_info("%s", usb_errmsg(usb));
+    if (usb_hid_write(usb, data, len, timeout_ms) != len) {
+        log_error("usb hid writting: %s", usb_errmsg(usb));
+        goto cleanup;
+    }
     
     usb_hid_get_input_report(usb, data, sizeof(data), timeout_ms);
+
+cleanup:
+    free(ctx);
+}
+
+/*
+ * exmaple: usb_hid_write 0 0x0 0x06 0x55 0xAA 0x80 0x01 0xA1 0x20
+ */
+static int cmd_usb_hid_write(int argc, char *argv[])
+{
+    struct cmd_context *ctx = malloc(sizeof(*ctx));
+    ctx->argc = argc;
+    ctx->argv = argv;
+    thpool_add_work(thpool, task_usb_hid_write, ctx);
     return 0;
 }
 
 static int on_hid_get_input_report(const uint8_t *buf, size_t len)
 {
     int i;
-    shell_printf("Got:\n");
+    shell_printf("Got %d bytes:\n", buf[0]);
     for(i=0; i<buf[0]; i++) {
-        shell_printf("%02x ", buf[i]);
-    }
-    shell_printf("\n");
+        printf("%02x ", buf[i]);
+    };
+    printf("\n");
     return 0;
 }
 
@@ -470,35 +492,6 @@ static command_t commands[] = {
     { NULL, NULL, NULL},
 };
 
-static void shell_printf(const char *fmt, ...)
-{
-    va_list args;
-    bool save_input;
-    char *saved_line;
-    int saved_point;
-
-    save_input = !RL_ISSTATE(RL_STATE_DONE);
-    if (save_input) {
-        saved_point = rl_point;
-        saved_line = rl_copy_text(0, rl_end);
-        rl_save_prompt();
-        rl_replace_line("", 0);
-        rl_redisplay();
-    }
-
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
-
-    if (save_input) {
-        rl_restore_prompt();
-        rl_replace_line(saved_line, 0);
-        rl_point = saved_point;
-        rl_forced_update_display();
-        free(saved_line);
-    }
-}
-
 static command_t *shell_find_command(const char *name)
 {
     int i;
@@ -515,6 +508,35 @@ static command_t *shell_find_command(const char *name)
     }
 
     return NULL;
+}
+
+void shell_printf(const char *fmt, ...)
+{
+    va_list args;
+    bool save_input;
+    char *saved_line;
+    int saved_point;
+
+    save_input = !RL_ISSTATE(RL_STATE_DONE);
+    if (save_input) {
+        saved_point = rl_point;
+        saved_line = rl_copy_text(0, rl_end);
+        rl_save_prompt();
+        //rl_replace_line("", 0);
+        rl_redisplay();
+    }
+
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+
+    if (save_input) {
+        rl_restore_prompt();
+        //(saved_line, 0);
+        rl_point = saved_point;
+        rl_forced_update_display();
+        free(saved_line);
+    }
 }
 
 void shell_exec(int argc, char *argv[])

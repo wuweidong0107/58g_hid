@@ -6,6 +6,7 @@
 #define PROMPT_ON	COLOR_BLUE "[devctl]" COLOR_OFF "# "
 #define PROMPT_OFF	""
 
+void shell_printf(const char *fmt, ...);
 void shell_exec(int argc, char *argv[]);
 void menu_init(void);
 #endif
