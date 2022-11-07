@@ -13,7 +13,7 @@
 #include "log.h"
 #include "device.h"
 #include "thpool.h"
-#include "menu.h"
+#include "shell.h"
 
 threadpool thpool;
 static struct ev_loop *loop;
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     }
 
     /* setup menu */
-    menu_init();
+    shell_init();
     fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
     rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
     rl_set_prompt(PROMPT_ON);
