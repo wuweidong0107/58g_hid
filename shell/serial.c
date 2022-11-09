@@ -11,11 +11,16 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
     for (i=0; i<len; i++) {
         shell_printf("%i:%x\n",i, buf[i]);
     }
-    return 0;
+    return len;
 }
 
-static struct serial_cbs serial_menu_cbs = {
+static struct serial_client_ops serial_menu_ops = {
     .on_receive = on_serial_receive,
+};
+
+static struct serial_client serial_menu = {
+    .name = "serial menu",
+    .ops = &serial_menu_ops,
 };
 
 int cmd_serial_list(int argc, char *argv[])
@@ -54,12 +59,25 @@ int cmd_serial_write(int argc, char *argv[])
     return 0;
 }
 
-void serial_shell_init(void)
+int serial_shell_init(void)
 {
-    int i;
+    int i, ret;
     serial_t *serial;
 
     for (i=0; (serial=get_serial(i)) != NULL; i++) {
-        serial_set_cbs(serial, &serial_menu_cbs);
+        if ((ret = serial_add_client(serial, &serial_menu)))
+            return ret;
+    }
+
+    return 0;
+}
+
+void serial_shell_exit(void)
+{
+    int i;
+    serial_t *aw;
+
+    for (i=0; (aw=get_serial(i)) != NULL; i++) {
+        serial_remove_client(aw, &serial_menu);
     }
 }

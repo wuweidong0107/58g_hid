@@ -9,6 +9,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdbool.h>
 #include <ev.h>
+#include "list.h"
 
 enum serial_error_code {
     SERIAL_ERROR_ARG            = -1, /* Invalid arguments */
@@ -33,8 +34,14 @@ typedef struct serial_options {
 
 typedef struct serial_handle serial_t;
 
-struct serial_cbs {
+struct serial_client_ops {
     int (*on_receive)(serial_t *serial, const uint8_t *buf, size_t len);
+};
+
+struct serial_client {
+    char name[64];
+    struct serial_client_ops *ops;
+    struct list_head list;
 };
 
 /* Primary Functions */
@@ -80,7 +87,8 @@ const char* serial_id(serial_t *serial);
 int serial_tostring(serial_t *serial, char *str, size_t len);
 void serial_set_userdata(serial_t *serial, void *userdata);
 void* serial_get_userdata(serial_t *serial);
-void serial_set_cbs(serial_t *serial, struct serial_cbs *cbs);
+int serial_add_client(serial_t *serial, struct serial_client *client);
+void serial_remove_client(serial_t *serial, struct serial_client *client);
 
 /* Error Handling */
 int serial_errno(serial_t *serial);

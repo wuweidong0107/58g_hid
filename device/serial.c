@@ -30,6 +30,7 @@ struct serial_handle {
     struct serial_cbs *cbs;
     void *user_data;
 
+    struct list_head clients;
     struct {
         int c_errno;
         char errmsg[256];
@@ -227,10 +228,14 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         remain -= ret;
     } while (remain && nonblock);
 
-    if(serial->cbs->on_receive) {
-        int len = serial->cbs->on_receive(serial, rbuf->buf, rbuf->len);
-        iobuf_del(rbuf, 0, len);
+    /* all client should consume data in same way */
+    struct serial_client *client;
+    int len = 0;
+    list_for_each_entry(client, &serial->clients, list) {
+        if (client->ops->on_receive)
+            len = client->ops->on_receive(serial, rbuf->buf, rbuf->len);
     }
+    iobuf_del(rbuf, 0, len);
 }
 
 int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct ev_loop *loop)
@@ -789,7 +794,17 @@ void* serial_get_userdata(serial_t *serial)
     return serial->user_data;
 }
 
-void serial_set_cbs(serial_t *serial, struct serial_cbs *cbs)
+int serial_add_client(serial_t *serial, struct serial_client *client)
 {
-    serial->cbs = cbs;
+    if (!client || !client->ops)
+        return -1;
+    list_add_tail(&client->list, &serial->clients);
+    return 0;
+}
+
+void serial_remove_client(serial_t *serial, struct serial_client *client)
+{
+    if (!client)
+        return;
+    list_del(&client->list);
 }

@@ -6,6 +6,7 @@
 #include <libudev.h>
 #include <ev.h>
 
+#include "list.h"
 #include "aw5808.h"
 #include "codec.h"
 #include "log.h"
@@ -49,8 +50,8 @@ struct aw5808_handle {
     struct io_channel udev_io;
     struct udev *udev;
     struct udev_monitor *mon;
-    /* user callback */
-    struct aw5808_cbs *cbs;
+    
+    struct list_head clients;
     /* error handle */
     struct {
         int c_errno;
@@ -154,40 +155,61 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
         used += ret;
         buf += ret;
         len -= ret;
+        struct aw5808_client *client;
         switch(data[0]) {
             case 0xD0:
-                if (aw->cbs->on_get_config)
-                    aw->cbs->on_get_config(aw, data, data_len);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_get_config)
+                        client->ops->on_get_config(aw, data, data_len);
+                }
                 break;
             case 0xD1:
-                if (aw->cbs->on_get_rfstatus && data_len == 2)
-                    aw->cbs->on_get_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_get_rfstatus && data_len == 2)
+                        client->ops->on_get_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
+                }
                 break;
             case 0x52:
-                if (aw->cbs->on_notify_rfstatus && data_len == 2)
-                    aw->cbs->on_notify_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_notify_rfstatus && data_len == 2)
+                        client->ops->on_notify_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
+                }
+                break;
             case 0xD3:
-                if (aw->cbs->on_pair)
-                    aw->cbs->on_pair(aw);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_pair)
+                        client->ops->on_pair(aw);
+                }
+                break;
             case 0xD4:
-                if (aw->cbs->on_set_mode && data_len == 2)
-                    aw->cbs->on_set_mode(aw, data[1]);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_set_mode && data_len == 2)
+                        client->ops->on_set_mode(aw, data[1]);
+                }
                 break;
             case 0xD5:
-                if (aw->cbs->on_set_i2s_mode && data_len == 2)
-                    aw->cbs->on_set_i2s_mode(aw, data[1]);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_set_i2s_mode && data_len == 2)
+                        client->ops->on_set_i2s_mode(aw, data[1]);
+                }
                 break;
             case 0xD6:
-                if (aw->cbs->on_set_connect_mode && data_len == 2)
-                    aw->cbs->on_set_connect_mode(aw, data[1]);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_set_connect_mode && data_len == 2)
+                        client->ops->on_set_connect_mode(aw, data[1]);
+                }
                 break;
             case 0xD7:
-                if (aw->cbs->on_set_rfchannel && data_len == 2)
-                    aw->cbs->on_set_rfchannel(aw, data[1]);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_set_rfchannel && data_len == 2)
+                        client->ops->on_set_rfchannel(aw, data[1]);
+                }
                 break;
             case 0xD8:
-                if (aw->cbs->on_set_rfpower && data_len == 2)
-                    aw->cbs->on_set_rfpower(aw, data[1]);
+                list_for_each_entry(client, &aw->clients, list) {
+                    if (client->ops->on_set_rfpower && data_len == 2)
+                        client->ops->on_set_rfpower(aw, data[1]);
+                }
                 break;
             default:
                 break;
@@ -196,8 +218,13 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
     return used;
 }
 
-static struct serial_cbs cbs = {
+static struct serial_client_ops serial_menu_ops = {
     .on_receive = on_serial_receive,
+};
+
+static struct serial_client serial_menu = {
+    .name = "aw5808 serial",
+    .ops = &serial_menu_ops,
 };
 
 const char *aw5808_errmsg(aw5808_t *aw)
@@ -257,7 +284,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
         }
 
-        serial_set_cbs(aw->serial, &cbs);
+        serial_add_client(aw->serial, &serial_menu);
         serial_set_userdata(aw->serial, aw);
         aw->codec_serial = get_codec("aw5808_serial");
         if (!aw->codec_serial)
@@ -378,7 +405,11 @@ int aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
 
     /* Already in request mode ? */
     if (mode == aw->mode) {
-        aw->cbs->on_set_mode(aw, mode);
+        struct aw5808_client *client;
+        list_for_each_entry(client, &aw->clients, list) {
+            if (client->ops->on_set_mode)
+                client->ops->on_set_mode(aw, mode);
+        }
         return 0;
     }
     
@@ -406,7 +437,11 @@ int aw5808_set_i2s_mode(aw5808_t *aw, aw5808_i2s_mode_t mode)
 
     /* Already in request mode ? */
     if (mode == aw->i2s_mode) {
-        aw->cbs->on_set_i2s_mode(aw, mode);
+        struct aw5808_client *client;
+        list_for_each_entry(client, &aw->clients, list) {
+            if (client->ops->on_set_i2s_mode)
+                client->ops->on_set_i2s_mode(aw, mode);
+        }
         return 0;
     }
 
@@ -427,7 +462,11 @@ int aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode)
 
     /* Already in request mode ? */
     if (mode == aw->conn_mode) {
-        aw->cbs->on_set_connect_mode(aw, mode);
+        struct aw5808_client *client;
+        list_for_each_entry(client, &aw->clients, list) {
+            if (client->ops->on_set_connect_mode)
+                client->ops->on_set_connect_mode(aw, mode);
+        }
         return 0;
     }
     
@@ -450,7 +489,11 @@ int aw5808_set_rfchannel(aw5808_t *aw, uint8_t channel)
 
     /* Already in request channel ? */
     if (channel == aw->rf_channel) {
-        aw->cbs->on_set_rfchannel(aw, channel);
+        struct aw5808_client *client;
+        list_for_each_entry(client, &aw->clients, list) {
+            if (client->ops->on_set_rfchannel)
+                client->ops->on_set_rfchannel(aw, channel);
+        }
         return 0;
     }
 
@@ -473,10 +516,14 @@ int aw5808_set_rfpower(aw5808_t *aw, uint8_t power)
 
     /* Already in request power ? */
     if (power == aw->rf_power) {
-        aw->cbs->on_set_rfpower(aw, power);
+        struct aw5808_client *client;
+        list_for_each_entry(client, &aw->clients, list) {
+            if (client->ops->on_set_rfpower)
+                client->ops->on_set_rfpower(aw, power);
+        }
         return 0;
     }
-    
+
     if (aw->serial) {
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
@@ -505,6 +552,23 @@ int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len)
     return 0;
 }
 
+int aw5808_add_client(aw5808_t *aw, struct aw5808_client *client)
+{
+    if (!client || !client->ops)
+        return -1;
+    printf("%s: %s\n", __func__, client->name);
+    list_add_tail(&client->list, &aw->clients);
+    return 0;
+}
+
+void aw5808_remove_client(aw5808_t *aw, struct aw5808_client *client)
+{
+    printf("%s: %s\n", __func__, client->name);
+    if (!client)
+        return;
+    list_del(&client->list);
+}
+
 int aw5808_mode(aw5808_t *aw)
 {
     return aw->mode;
@@ -524,9 +588,4 @@ const char *aw5808_id(aw5808_t *aw)
 {
     snprintf(aw->ident, sizeof(aw->ident)-1, "%s %s", serial_id(aw->serial), hidraw_id(aw->hidraw));
     return aw->ident;
-}
-
-void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs)
-{
-    aw->cbs = cbs;
 }

@@ -89,18 +89,6 @@ static void on_aw5808_set_rfpower(aw5808_t *aw, uint8_t power)
     shell_printf("rf power is %d.\n", power);
 }
 
-struct aw5808_cbs aw5808_menu_cbs = {
-    .on_get_config = on_aw5808_get_config,
-    .on_get_rfstatus = on_aw5808_get_rfstatus,
-    .on_notify_rfstatus = on_aw5808_notify_rfstatus,
-    .on_pair = on_aw5808_pair,
-    .on_set_mode = on_aw5808_set_mode,
-    .on_set_i2s_mode = on_aw5808_set_i2s_mode,
-    .on_set_connect_mode = on_aw5808_set_connect_mode,
-    .on_set_rfchannel = on_aw5808_set_rfchannel,
-    .on_set_rfpower = on_aw5808_set_rfpower,
-};
-
 int cmd_aw5808_list(int argc, char *argv[])
 {
     int i;
@@ -294,12 +282,41 @@ int cmd_aw5808_set_rfpower(int argc, char *argv[])
     return ret;
 }
 
-void aw5808_shell_init(void)
+static struct aw5808_client_ops aw5808_menu_ops = {
+    .on_get_config = on_aw5808_get_config,
+    .on_get_rfstatus = on_aw5808_get_rfstatus,
+    .on_notify_rfstatus = on_aw5808_notify_rfstatus,
+    .on_pair = on_aw5808_pair,
+    .on_set_mode = on_aw5808_set_mode,
+    .on_set_i2s_mode = on_aw5808_set_i2s_mode,
+    .on_set_connect_mode = on_aw5808_set_connect_mode,
+    .on_set_rfchannel = on_aw5808_set_rfchannel,
+    .on_set_rfpower = on_aw5808_set_rfpower,
+};
+
+static struct aw5808_client aw5808_menu = {
+    .name = "aw5808 menu",
+    .ops = &aw5808_menu_ops,
+};
+
+int aw5808_shell_init(void)
+{
+    int i, ret;
+    aw5808_t *aw;
+
+    for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
+        if ((ret = aw5808_add_client(aw, &aw5808_menu)))
+            return ret;
+    }
+    return 0;
+}
+
+void aw5808_shell_exit(void)
 {
     int i;
     aw5808_t *aw;
 
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
-        aw5808_set_cbs(aw, &aw5808_menu_cbs);
+        aw5808_remove_client(aw, &aw5808_menu);
     }
 }

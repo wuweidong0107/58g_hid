@@ -14,5 +14,6 @@ struct cmd_context {
 
 void shell_printf(const char *fmt, ...);
 void shell_exec(int argc, char *argv[]);
-void shell_init(void);
+int shell_init(void);
+void shell_exit(void);
 #endif

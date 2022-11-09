@@ -2,7 +2,6 @@
 #include <string.h>
 #include "log.h"
 #include "usb.h"
-#include "usb.h"
 
 #define HID_INPUT_REPORT    1
 #define HID_OUTPUT_REPORT    2
@@ -483,6 +482,8 @@ int usb_add_client(usb_t *usb, struct usb_client *client)
 
 void usb_remove_client(usb_t *usb, struct usb_client *client)
 {
+    if (!client)
+        return;
     list_del(&client->list);
 }
 

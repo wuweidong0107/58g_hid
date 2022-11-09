@@ -1,4 +1,5 @@
 - 将 usb_hid_write 放入线程池中 (OK);
+- 添加 client list (OK);
 - 非交互模式;
 - gpio
 - input

@@ -7,8 +7,7 @@
 #include <unistd.h>
 #include "log.h"
 #include "shell.h"
-#include "serial.h"
-#include "usb.h"
+#include "shell_internal.h"
 #include "stdstring.h"
 #include "device.h"
 
@@ -18,24 +17,6 @@ typedef struct {
     cmd_fn_t func;
     const char *doc;
 } command_t;
-
-extern void aw5808_shell_init(void);
-extern void serial_shell_init(void);
-extern void usb_shell_init(void);
-
-extern int cmd_aw5808_list(int argc, char *argv[]);
-extern int cmd_aw5808_get_config(int argc, char *argv[]);
-extern int cmd_aw5808_get_rfstatus(int argc, char *argv[]);
-extern int cmd_aw5808_pair(int argc, char *argv[]);
-extern int cmd_aw5808_set_mode(int argc, char *argv[]);
-extern int cmd_aw5808_set_i2s_mode(int argc, char *argv[]);
-extern int cmd_aw5808_set_connect_mode(int argc, char *argv[]);
-extern int cmd_aw5808_set_rfchannel(int argc, char *argv[]);
-extern int cmd_aw5808_set_rfpower(int argc, char *argv[]);
-extern int cmd_serial_list(int argc, char *argv[]);
-extern int cmd_serial_write(int argc, char *argv[]);
-extern int cmd_usb_hid_list(int argc, char *argv[]);
-extern int cmd_usb_hid_write(int argc, char *argv[]);
 
 static command_t cmd_list[];
 static struct {
@@ -154,9 +135,20 @@ void shell_exec(int argc, char *argv[])
     return;
 }
 
-void shell_init(void)
+int shell_init(void)
 {
-    aw5808_shell_init();
-    serial_shell_init();
-    usb_shell_init();
+    int ret = 0;
+    if ((ret = aw5808_shell_init()))
+        return ret;
+    if ((ret = serial_shell_init()))
+        return ret;
+    if ((ret = usb_shell_init()))
+        return ret;
+}
+
+void shell_exit(void)
+{
+    aw5808_shell_exit();
+    serial_shell_exit();
+    usb_shell_exit();
 }

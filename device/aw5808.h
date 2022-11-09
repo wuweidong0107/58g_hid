@@ -3,9 +3,9 @@
 
 #include <stdint.h>
 #include <ev.h>
-
 #include "hidraw.h"
 #include "serial.h"
+#include "list.h"
 
 enum aw5808_error_code {
     AW5808_ERROR_ARG            = -1, /* Invalid arguments */
@@ -36,7 +36,15 @@ typedef enum aw5808_connect_mode {
 } aw5808_connect_mode_t;
 
 typedef struct aw5808_handle aw5808_t;
-struct aw5808_cbs {
+
+typedef struct aw5808_options {
+    char serial[96];             /* optional */
+    char usb[96];                 /* optional */
+    aw5808_mode_t mode;             /* i2s/usb */
+    struct ev_loop *loop;
+} aw5808_options_t;
+
+struct aw5808_client_ops {
     void (*on_get_config)(aw5808_t *aw, const uint8_t *data, int len);
     void (*on_get_rfstatus)(aw5808_t *aw, const uint8_t is_connected, uint8_t pair_status);
     void (*on_notify_rfstatus)(aw5808_t *aw, uint8_t is_connected, uint8_t pair_status);
@@ -46,15 +54,13 @@ struct aw5808_cbs {
     void (*on_set_connect_mode)(aw5808_t *aw, aw5808_connect_mode_t mode);
     void (*on_set_rfchannel)(aw5808_t *aw, uint8_t channel);
     void (*on_set_rfpower)(aw5808_t *aw, uint8_t power);
-
 };
 
-typedef struct aw5808_options {
-    char serial[96];             /* optional */
-    char usb[96];                 /* optional */
-    aw5808_mode_t mode;             /* i2s/usb */
-    struct ev_loop *loop;
-} aw5808_options_t;
+struct aw5808_client {
+    char name[64];
+    struct aw5808_client_ops *ops;
+    struct list_head list;
+};
 
 aw5808_t *aw5808_new();
 void aw5808_free(aw5808_t *aw);
@@ -71,12 +77,11 @@ int aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode);
 int aw5808_set_rfchannel(aw5808_t *aw, uint8_t channel);
 int aw5808_set_rfpower(aw5808_t *aw, uint8_t power);
 int aw5808_read_fw(aw5808_t *aw, uint8_t *buf, size_t len);
-
+int aw5808_add_client(aw5808_t *aw, struct aw5808_client *client);
+void aw5808_remove_client(aw5808_t *aw, struct aw5808_client *client);
 int aw5808_mode(aw5808_t *aw);
 const char *aw5808_id(aw5808_t *aw);
 const char *aw5808_tostring(aw5808_t *aw);
-void aw5808_set_cbs(aw5808_t *aw, struct aw5808_cbs *cbs);
-
 /* Error Handling */
 int aw5808_errno(aw5808_t *aw);
 const char *aw5808_errmsg(aw5808_t *aw);

@@ -139,6 +139,7 @@ int main(int argc, char *argv[])
     ev_run(loop, 0);
 
     /* cleanup */
+    shell_exit();
     devices_exit();
     ev_io_stop(loop, &stdin_watcher);
     ev_loop_destroy(loop);

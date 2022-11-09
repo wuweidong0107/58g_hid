@@ -91,16 +91,28 @@ static struct usb_client_ops usb_menu_ops = {
 };
 
 static struct usb_client usb_menu = {
-    .name = "menu",
+    .name = "usb menu",
     .ops = &usb_menu_ops,
 };
 
-void usb_shell_init(void)
+int usb_shell_init(void)
+{
+    int i,ret;
+    usb_t *usb;
+
+    for (i=0; (usb=get_usb(i)) != NULL; i++) {
+        if ((ret = usb_add_client(usb, &usb_menu)))
+            return ret;
+    }
+    return 0;
+}
+
+void usb_shell_exit(void)
 {
     int i;
     usb_t *usb;
 
     for (i=0; (usb=get_usb(i)) != NULL; i++) {
-        usb_add_client(usb, &usb_menu);
+        usb_remove_client(usb, &usb_menu);
     }
 }
