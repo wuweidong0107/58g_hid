@@ -107,6 +107,93 @@ static void udev_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
     }
 }
 
+static void handle_get_config(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    uint16_t firmware_version = (data[0]<<8) + data[1];
+    uint8_t mcu_verison = data[2];
+    aw5808_mode_t mode = data[3];
+    uint8_t rf_channel = data[4];
+    uint8_t rf_power = data[5];
+    struct aw5808_client *client;
+
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_get_config)
+            client->ops->on_get_config(aw, firmware_version, mcu_verison, mode, rf_channel, rf_power);
+    }
+}
+
+static void handl_get_rfstatus(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_get_rfstatus && data_len ==1)
+            client->ops->on_get_rfstatus(aw, data[0]&0x1, (data[0]>>1 & 0x3));
+    }
+}
+
+static void handle_notify_rfstatus(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_notify_rfstatus && data_len == 1)
+            client->ops->on_notify_rfstatus(aw, data[0]&0x1, (data[0]>>1 & 0x3));
+    }
+}
+
+static void handle_pair(aw5808_t *aw)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_pair)
+            client->ops->on_pair(aw);
+    }
+}
+
+static void handle_set_mode(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_set_mode && data_len == 1)
+            client->ops->on_set_mode(aw, data[0]);
+    }
+}
+
+static void handle_set_i2s_mode(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_set_mode && data_len == 1)
+            client->ops->on_set_mode(aw, data[0]);
+    }
+}
+
+static void handle_set_connect_mode(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_set_mode && data_len == 1)
+            client->ops->on_set_mode(aw, data[0]);
+    }
+}
+
+static void handle_set_rfchannel(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_set_mode && data_len == 1)
+            client->ops->on_set_mode(aw, data[0]);
+    }
+}
+
+static void handle_set_rfpower(aw5808_t *aw, const uint8_t *data, uint32_t data_len)
+{
+    struct aw5808_client *client;
+    list_for_each_entry(client, &aw->clients, list) {
+        if (client->ops->on_set_mode && data_len == 1)
+            client->ops->on_set_mode(aw, data[0]);
+    }
+}
+
 static int serial_sendframe(aw5808_t *aw, const uint8_t *data, size_t data_len, bool sync)
 {
     uint8_t frame[64]={0};
@@ -139,7 +226,7 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
         ret = codec_serial->decode(buf, len, &data, &data_len);
         if (!data)
             break;
-#if 1
+#if 0
         int i;
         printf("----------buf_len=%ld\n", len);
         for(i=0; i<len; i++) {
@@ -155,61 +242,33 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
         used += ret;
         buf += ret;
         len -= ret;
-        struct aw5808_client *client;
         switch(data[0]) {
             case 0xD0:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_get_config)
-                        client->ops->on_get_config(aw, data, data_len);
-                }
+                handle_get_config(aw, data+1, data_len-1);
                 break;
             case 0xD1:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_get_rfstatus && data_len == 2)
-                        client->ops->on_get_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
-                }
+                handl_get_rfstatus(aw, data+1, data_len-1);
                 break;
             case 0x52:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_notify_rfstatus && data_len == 2)
-                        client->ops->on_notify_rfstatus(aw, data[1]&0x1, (data[1]>>1 & 0x3));
-                }
+                handle_notify_rfstatus(aw, data+1, data_len-1);
                 break;
             case 0xD3:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_pair)
-                        client->ops->on_pair(aw);
-                }
+                handle_pair(aw);
                 break;
             case 0xD4:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_set_mode && data_len == 2)
-                        client->ops->on_set_mode(aw, data[1]);
-                }
+                handle_set_mode(aw, data+1, data_len-1);
                 break;
             case 0xD5:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_set_i2s_mode && data_len == 2)
-                        client->ops->on_set_i2s_mode(aw, data[1]);
-                }
+                handle_set_i2s_mode(aw, data+1, data_len-1);
                 break;
             case 0xD6:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_set_connect_mode && data_len == 2)
-                        client->ops->on_set_connect_mode(aw, data[1]);
-                }
+                handle_set_connect_mode(aw, data+1, data_len-1);
                 break;
             case 0xD7:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_set_rfchannel && data_len == 2)
-                        client->ops->on_set_rfchannel(aw, data[1]);
-                }
+                handle_set_rfchannel(aw, data+1, data_len-1);
                 break;
             case 0xD8:
-                list_for_each_entry(client, &aw->clients, list) {
-                    if (client->ops->on_set_rfpower && data_len == 2)
-                        client->ops->on_set_rfpower(aw, data[1]);
-                }
+                handle_set_rfpower(aw, data+1, data_len-1);
                 break;
             default:
                 break;
@@ -218,13 +277,13 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
     return used;
 }
 
-static struct serial_client_ops serial_menu_ops = {
+static struct serial_client_ops serial_client_aw5808_ops = {
     .on_receive = on_serial_receive,
 };
 
-static struct serial_client serial_menu = {
+static struct serial_client serial_client_aw5808 = {
     .name = "aw5808 serial",
-    .ops = &serial_menu_ops,
+    .ops = &serial_client_aw5808_ops,
 };
 
 const char *aw5808_errmsg(aw5808_t *aw)
@@ -255,7 +314,7 @@ aw5808_t *aw5808_new()
     aw->udev = udev_new();
     if (!aw->udev)
         goto fail;
-
+    INIT_LIST_HEAD(&aw->clients);
     return aw;
 fail:
     aw5808_free(aw);
@@ -284,7 +343,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
         }
 
-        serial_add_client(aw->serial, &serial_menu);
+        serial_add_client(aw->serial, &serial_client_aw5808);
         serial_set_userdata(aw->serial, aw);
         aw->codec_serial = get_codec("aw5808_serial");
         if (!aw->codec_serial)

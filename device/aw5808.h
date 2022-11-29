@@ -45,7 +45,7 @@ typedef struct aw5808_options {
 } aw5808_options_t;
 
 struct aw5808_client_ops {
-    void (*on_get_config)(aw5808_t *aw, const uint8_t *data, int len);
+    void (*on_get_config)(aw5808_t *aw, uint16_t firmware_ver, uint8_t mcu_ver, aw5808_mode_t mode, uint8_t rf_channel, uint8_t rf_power);
     void (*on_get_rfstatus)(aw5808_t *aw, const uint8_t is_connected, uint8_t pair_status);
     void (*on_notify_rfstatus)(aw5808_t *aw, uint8_t is_connected, uint8_t pair_status);
     void (*on_pair)(aw5808_t *aw);

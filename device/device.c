@@ -25,17 +25,22 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
     int serial_idx = 0;
     int usb_idx = 0;
 
-   if (access(conf_file, R_OK) < 0)
-      return -1;
-
-    if (usb_init())
+    if (access(conf_file, R_OK) < 0) {
+        log_error("config file not exist");
         return -1;
+    }
+
+    if (usb_init()) {
+        log_error("usb init fail");
+        return -1;
+    }
 
     for (s = 0; ini_getsection(s, section, sizearray(section), conf_file) > 0; s++) {
         char *end = strchr(section, '/');
+        int section_len = strlen(section);
         if (end != NULL)
-            *end = '\0';
-        if (!strncmp(section, "aw5808", strlen(section)) && aw_idx < DEVICE_MAX_NUM) {
+            section_len = end - section;
+        if (!strncmp(section, "aw5808", section_len) && aw_idx < DEVICE_MAX_NUM) {
             aw5808_options_t opt;
             memset(&opt, 0, sizeof(opt));
             opt.loop = loop;
@@ -59,7 +64,7 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
                 continue;
             }
             aw_idx++;
-        } else if (!strncmp(section, "serial", strlen(section)) && serial_idx < DEVICE_MAX_NUM) {
+        } else if (!strncmp(section, "serial", section_len) && serial_idx < DEVICE_MAX_NUM) {
             serial_options_t opt;
             memset(&opt, 0, sizeof(opt));
             for (k = 0; ini_getkey(section, k, key, sizearray(key), conf_file) > 0; k++) {
@@ -80,7 +85,7 @@ int devices_init(struct ev_loop *loop, const char *conf_file)
                 continue;
             }
             serial_idx++;
-        } else if (!strncmp(section, "usb", strlen(section)) && usb_idx < DEVICE_MAX_NUM) {
+        } else if (!strncmp(section, "usb", section_len) && usb_idx < DEVICE_MAX_NUM) {
             usb_options_t opt;
             memset(&opt, 0, sizeof(opt));
             for (k = 0; ini_getkey(section, k, key, sizearray(key), conf_file) > 0; k++) {

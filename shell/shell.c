@@ -144,6 +144,7 @@ int shell_init(void)
         return ret;
     if ((ret = usb_shell_init()))
         return ret;
+    return ret;
 }
 
 void shell_exit(void)

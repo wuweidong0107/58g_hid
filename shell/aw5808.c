@@ -5,13 +5,14 @@
 #include "aw5808.h"
 #include "device.h"
 
-static void on_aw5808_get_config(aw5808_t *aw, const uint8_t *data, int len)
+static void on_aw5808_get_config(aw5808_t *aw, uint16_t firmware_version, uint8_t mcu_verison,
+        aw5808_mode_t mode, uint8_t rf_channel, uint8_t rf_power)
 {
-    shell_printf("5.8G firmware version: %x %x\n", data[1], data[2]);
-    shell_printf("MCU firmware version: %x\n", data[3]);
-    shell_printf("Mode: %s\n", data[4] == AW5808_MODE_I2S ? "i2s":"usb");
-    shell_printf("RF Channel: %d\n", data[5]);
-    shell_printf("RF Power: %d\n", data[6]);    
+    shell_printf("5.8G firmware version: %x\n", firmware_version);
+    shell_printf("MCU firmware version: %x\n", mcu_verison);
+    shell_printf("Mode: %s\n", mode == AW5808_MODE_I2S ? "i2s":"usb");
+    shell_printf("RF Channel: %d\n", rf_channel);
+    shell_printf("RF Power: %d\n", rf_power);
 }
 
 static void on_aw5808_get_rfstatus(aw5808_t *aw, uint8_t is_connected, uint8_t pair_status)

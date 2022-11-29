@@ -63,6 +63,7 @@ serial_t *serial_new()
         return NULL;
 
     serial->fd = -1;
+    INIT_LIST_HEAD(&serial->clients);
     return serial;
 }
 
@@ -228,14 +229,19 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         remain -= ret;
     } while (remain && nonblock);
 
-    /* all client should consume data in same way */
+    /* clients may or may not using same codec */
     struct serial_client *client;
-    int len = 0;
+    int len = 0, max_len = 0;
     list_for_each_entry(client, &serial->clients, list) {
-        if (client->ops->on_receive)
+        if (client->ops->on_receive) {
             len = client->ops->on_receive(serial, rbuf->buf, rbuf->len);
+            if (len > max_len) {
+                max_len = len;
+            }
+        }
     }
-    iobuf_del(rbuf, 0, len);
+
+    iobuf_del(rbuf, 0, max_len);
 }
 
 int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct ev_loop *loop)
