@@ -26,10 +26,10 @@ static struct serial_client serial_menu = {
 int cmd_serial_list(int argc, char *argv[])
 {
     int i;
-    serial_t *aw;
+    serial_t *serial;
 
-    for (i=0; (aw=get_serial(i)) != NULL; i++)
-        shell_printf("%d: %s\n", i, serial_id(aw));
+    for (i=0; (serial=get_serial(i)) != NULL; i++)
+        shell_printf("%d: %s\n", i, serial_id(serial));
     
     return 0;
 }

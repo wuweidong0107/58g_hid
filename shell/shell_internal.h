@@ -19,6 +19,7 @@ extern int cmd_aw5808_set_rfchannel(int argc, char *argv[]);
 extern int cmd_aw5808_set_rfpower(int argc, char *argv[]);
 extern int cmd_serial_list(int argc, char *argv[]);
 extern int cmd_serial_write(int argc, char *argv[]);
+extern int cmd_usb_hid_enumerate(int argc, char *argv[]);
 extern int cmd_usb_hid_list(int argc, char *argv[]);
 extern int cmd_usb_hid_write(int argc, char *argv[]);
 #endif

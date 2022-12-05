@@ -65,7 +65,7 @@ static int on_hid_get_input_report(const uint8_t *buf, size_t len)
     return 0;
 }
 
-int cmd_usb_hid_list(int argc, char *argv[])
+int cmd_usb_hid_enumerate(int argc, char *argv[])
 {
     usb_t *usb = get_usb(0);        // all usb device can do enumeration job
 
@@ -83,6 +83,17 @@ int cmd_usb_hid_list(int argc, char *argv[])
         cur_dev = cur_dev->next;
     }
     usb_hid_free_enumeration(usb, devs);
+    return 0;
+}
+
+int cmd_usb_hid_list(int argc, char *argv[])
+{
+    int i;
+    usb_t *usb;
+
+    for (i=0; (usb=get_usb(i)) != NULL; i++)
+        shell_printf("%d: %s\n", i, usb_id(usb));
+    
     return 0;
 }
 

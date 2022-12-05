@@ -28,6 +28,8 @@ struct hidraw_handle {
     int fd;
     struct ev_loop *loop;
     struct io_channel io;
+
+    struct list_head clients;
     struct {
         int c_errno;
         char errmsg[256];
@@ -311,3 +313,19 @@ int hidraw_close(hidraw_t *hidraw)
     hidraw->fd = -1;
     return 0;
 }
+
+int hidraw_add_client(hidraw_t *hidraw, struct hidraw_client *client)
+{
+    if (!client || !client->ops)
+        return -1;
+    list_add_tail(&client->list, &hidraw->clients);
+    return 0;
+}
+
+void hidraw_remove_client(hidraw_t *hidraw, struct hidraw_client *client)
+{
+    if (!client)
+        return;
+    list_del(&client->list);
+}
+

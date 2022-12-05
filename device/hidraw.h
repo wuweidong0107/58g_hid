@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <ev.h>
+#include "list.h"
 
 typedef struct hidraw_handle hidraw_t;
 
@@ -13,6 +14,16 @@ enum hidraw_error_code {
     HID_ERROR_CONFIGURE      = -4, /* Configuring hidraw device attributes */
     HID_ERROR_IO             = -5, /* Reading/writing hidraw device */
     HID_ERROR_CLOSE          = -6, /* Closing hidraw device */
+};
+
+struct hidraw_client_ops {
+    int (*on_receive)(hidraw_t *hidraw, const uint8_t *buf, size_t len);
+};
+
+struct hidraw_client {
+    char name[64];
+    struct hidraw_client_ops *ops;
+    struct list_head list;
 };
 
 hidraw_t *hidraw_new();

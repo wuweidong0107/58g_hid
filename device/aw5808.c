@@ -338,6 +338,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
     if(!opt->serial && !opt->usb)
         return _error(aw, AW5808_ERROR_OPEN, 0, "No serial or usb specifed", opt->serial);
 
+    bool is_serial_init = false;
     if (opt->serial) {
         if (serial_open(aw->serial, opt->serial, 57600, opt->loop) !=0) {
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
@@ -351,6 +352,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 
         if(aw5808_set_mode_sync(aw, opt->mode, 100))
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 set mode");
+        is_serial_init = true;
     }
 
     if (opt->usb) {
@@ -364,8 +366,11 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
         ev_io_start(aw->loop, &aw->udev_io.ior);
     
         /* if fail as hidraw not ready yet, will reopen it at udev callback. */
-        if (hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop))
+        if (hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop)) {
             log_warn("hidraw not ready yet");
+            if (is_serial_init == false)
+                return _error(aw, AW5808_ERROR_OPEN, 0, "Neither usb / uart is wokring");
+        }
     }
     
     aw->i2s_mode = AW5808_MODE_I2S_UNKNOWN;

@@ -295,7 +295,7 @@ int usb_open(usb_t *usb, uint16_t vendor_id, uint16_t product_id, const char *pa
             libusb_free_config_descriptor(conf_desc);
         }
     }
-
+    snprintf(usb->ident, sizeof(usb->ident)-1, "0x%x-0x%x-%s", vendor_id, product_id, path);
 out:
     libusb_free_device_list(devs, 1);
     return good_open == 1 ? 0:_error(usb, USB_ERROR_OPEN, 0, "Openning usb device");;
@@ -470,6 +470,11 @@ void usb_hid_free_enumeration(usb_t *usb, struct usb_device_info *devs)
         free(d);
         d = next;
     }
+}
+
+const char* usb_id(usb_t *usb)
+{
+    return usb->ident;
 }
 
 int usb_add_client(usb_t *usb, struct usb_client *client)

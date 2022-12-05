@@ -59,6 +59,7 @@ int usb_hid_write(usb_t *usb, const uint8_t *data, size_t length, int timeout_ms
 int usb_hid_get_input_report(usb_t *usb, uint8_t *data, size_t length, int timeout_ms);
 struct usb_device_info* usb_hid_enumerate(usb_t *usb, uint16_t vendor_id, uint16_t product_id);
 void usb_hid_free_enumeration(usb_t *usb, struct usb_device_info *devs);
+const char* usb_id(usb_t *usb);
 int usb_add_client(usb_t *usb, struct usb_client *client);
 void usb_remove_client(usb_t *usb, struct usb_client *client);
 const char *usb_errmsg(usb_t *usb);
