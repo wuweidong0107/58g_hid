@@ -54,7 +54,7 @@ static size_t aw5808_serial_decode(const uint8_t *frame, size_t length, const ui
     return frame_len;
 }
 
-codec_t codec_aw5808_serial = {
+aw5808_codec_t codec_aw5808_serial = {
    .ident = "aw5808_serial",
    .encode = aw5808_serial_encode,
    .decode = aw5808_serial_decode,

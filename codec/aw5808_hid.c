@@ -13,7 +13,7 @@ static size_t aw5808_hid_decode(const uint8_t *frame, size_t length, const uint8
     return 0;
 }
 
-codec_t codec_aw5808_hid = {
+aw5808_codec_t codec_aw5808_hid = {
    .ident = "aw5808_hid",
    .encode = aw5808_hid_encode,
    .decode = aw5808_hid_decode,

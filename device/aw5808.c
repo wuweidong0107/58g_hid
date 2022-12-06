@@ -35,10 +35,11 @@ struct aw5808_handle {
     /* io */
     struct ev_loop *loop;
     serial_t *serial;
-    const codec_t *codec_serial;
+    const aw5808_codec_t *codec_serial;
+
     char usb_name[128];
     hidraw_t *hidraw;
-    const codec_t *codec_hidraw;
+    const aw5808_codec_t *codec_hid;
     /* device config */
     aw5808_mode_t mode;                 /* i2s or usb */
     aw5808_i2s_mode_t i2s_mode;         /* master or slave */
@@ -217,7 +218,7 @@ static int serial_sendframe(aw5808_t *aw, const uint8_t *data, size_t data_len, 
 static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
 {
     aw5808_t *aw = serial_get_userdata(serial);
-    const codec_t *codec_serial = aw->codec_serial;
+    const aw5808_codec_t *codec_serial = aw->codec_serial;
     size_t used = 0;
 	const uint8_t *data = NULL;
 	size_t data_len, ret;
@@ -346,7 +347,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 
         serial_add_client(aw->serial, &serial_client_aw5808);
         serial_set_userdata(aw->serial, aw);
-        aw->codec_serial = get_codec("aw5808_serial");
+        aw->codec_serial = &codec_aw5808_serial;
         if (!aw->codec_serial)
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 get serial codec");
 
