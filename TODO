@@ -2,6 +2,7 @@
 - 添加 client list (OK);
 - 多个模块可共用同一个串口，例如在 /dev/ttyS1 上，既要解析MCU 控台数据，又要解析 DSP 数据。
 - 非交互模式;
+- rktools / io
 - gpio
 - input
 - wifi

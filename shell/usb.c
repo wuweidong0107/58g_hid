@@ -68,7 +68,8 @@ static int on_hid_get_input_report(const uint8_t *buf, size_t len)
 int cmd_usb_hid_enumerate(int argc, char *argv[])
 {
     usb_t *usb = get_usb(0);        // all usb device can do enumeration job
-
+    if (!usb)
+        return -1;
     struct usb_device_info *devs;
     struct usb_device_info *cur_dev;
     devs = usb_hid_enumerate(usb, 0x0, 0x0);

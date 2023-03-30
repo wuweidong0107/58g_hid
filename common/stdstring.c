@@ -98,15 +98,13 @@ int string_split(const char *s, const char *delim, char *parts[], size_t count)
 
     parts[i++] = tmp;
 
-    while(token) {
+    while(token && i < count) {
         token = strtok_r(NULL, delim, &rest);
         if (!token)
             break;
         if (!(tmp = strdup(token)))
             goto ret;
         parts[i++] = tmp;
-        if (i >= count)
-            break;
     }
 
     free(copy);

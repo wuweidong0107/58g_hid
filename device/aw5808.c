@@ -375,8 +375,10 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
         if (!aw->codec_serial)
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 get serial codec");
 
-        if(aw5808_set_mode_sync(aw, opt->mode, 100))
+        if(aw5808_set_mode_sync(aw, opt->mode, 2000)) {
+	     log_error("aw5808_set_mode_sync fail: %s", aw5808_errmsg(aw));
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 set mode");
+        }
         is_serial_init = true;
     }
 
@@ -424,13 +426,13 @@ int aw5808_get_config(aw5808_t *aw)
 
 int aw5808_get_rfstatus(aw5808_t *aw)
 {
-    if (aw->serial) {
+    if (aw->hidraw) {
+        // TODO
+    } else if (aw->serial) {
         uint8_t data[2] = {0x51, 0x0};
         size_t data_len = 2;
         if (serial_sendframe(aw, data, data_len, 0) == 0)
             return 0;
-    } else if (aw->hidraw) {
-        // TODO
     }
     return _error(aw, AW5808_ERROR_QUERY, 0, "Getting RF status");
 }

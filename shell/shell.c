@@ -2,9 +2,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <ev.h>
 #include <readline/readline.h>
+#include <readline/history.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <ev.h>
+#include <wordexp.h>
+
 #include "log.h"
 #include "shell.h"
 #include "shell_internal.h"
@@ -19,11 +23,14 @@ typedef struct {
 } command_t;
 
 static command_t cmd_list[];
-static struct {
+static struct context {
     int argc;
     char **argv;
-    bool mode;
-} data;
+    bool mode;          // interactive 
+    /* io */
+    struct ev_loop *loop;
+    ev_io stdin_watcher;
+} ctx;
 
 static int cmd_help(int argc, char *argv[])
 {
@@ -81,6 +88,61 @@ static command_t *shell_find_command(const char *name)
     return NULL;
 }
 
+static void stdin_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+{
+    rl_callback_read_char();
+}
+
+static int shell_exec(int argc, char *argv[])
+{
+    int ret = -1;
+    command_t *cmd = shell_find_command(argv[0]);
+    if (cmd) {
+        ret = cmd->func(argc, argv);
+        switch(ret) {
+            case 0:
+                break;
+            case -ENOENT: 
+                shell_printf("Unkown command!\n");
+                cmd_help(0, NULL);
+                break;
+            case -EINVAL:
+                shell_printf("Invalid command param\n");
+                cmd_help(0, NULL);
+                break;
+            default:
+                shell_printf("Command exec fail, ret=%d\n", ret);
+        }
+        return ret;
+    }
+    cmd_help(0, NULL);
+    return ret;
+}
+
+static void process_line(char *line)
+{
+    if (line == NULL) {
+        ev_break(ctx.loop, EVBREAK_ALL);
+        rl_callback_handler_remove();
+    } else {
+        if (*line != '\0')
+            add_history(line);
+        
+        wordexp_t w;
+        if (wordexp(line, &w, WRDE_NOCMD))
+            return;
+
+        if (w.we_wordc == 0) {
+            wordfree(&w);
+            return;
+        }
+        
+        shell_exec(w.we_wordc, w.we_wordv);
+        wordfree(&w);
+        free(line);
+    }
+}
+
 void shell_printf(const char *fmt, ...)
 {
     va_list args;
@@ -110,46 +172,50 @@ void shell_printf(const char *fmt, ...)
     }
 }
 
-void shell_exec(int argc, char *argv[])
-{
-    int ret;
-    command_t *cmd = shell_find_command(argv[0]);
-    if (cmd) {
-        ret = cmd->func(argc, argv);
-        switch(ret) {
-            case 0:
-                break;
-            case -ENOENT: 
-                shell_printf("Unkown command!\n");
-                cmd_help(0, NULL);
-                break;
-            case -EINVAL:
-                shell_printf("Invalid command param\n");
-                cmd_help(0, NULL);
-                break;
-            default:
-                shell_printf("Command exec fail, ret=%d\n", ret);
-        }
-        return;
-    }
-    cmd_help(0, NULL);
-    return;
-}
-
-int shell_init(void)
+int shell_init(struct ev_loop *loop, int argc, char **argv, bool mode)
 {
     int ret = 0;
+
+	ctx.argc = argc;
+	ctx.argv = argv;
+    ctx.mode = mode;
+    ctx.loop = loop;
+    
     if ((ret = aw5808_shell_init()))
         return ret;
     if ((ret = serial_shell_init()))
         return ret;
     if ((ret = usb_shell_init()))
         return ret;
+    
+    if (ctx.mode == false)
+        return ret;
+
+    ev_io_init(&ctx.stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
+    ev_io_start(loop, &ctx.stdin_watcher);
+
+    fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
+    rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
+    rl_set_prompt(PROMPT_ON);
     return ret;
 }
 
-void shell_exit(void)
+int shell_run(struct ev_loop *loop)
 {
+    int status = 0;
+    if (ctx.mode == false) {
+        status = shell_exec(ctx.argc, ctx.argv);
+    } else {
+        ev_run(loop, 0);
+    }
+    return status;
+}
+
+void shell_exit(struct ev_loop *loop)
+{
+    rl_callback_handler_remove();
+    ev_io_stop(loop, &ctx.stdin_watcher);
+
     aw5808_shell_exit();
     serial_shell_exit();
     usb_shell_exit();
