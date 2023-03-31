@@ -22,4 +22,5 @@ extern int cmd_serial_write(int argc, char *argv[]);
 extern int cmd_usb_hid_enumerate(int argc, char *argv[]);
 extern int cmd_usb_hid_list(int argc, char *argv[]);
 extern int cmd_usb_hid_write(int argc, char *argv[]);
+extern int cmd_io(int argc, char *argv[]);
 #endif

@@ -61,6 +61,7 @@ int main(int argc, char *argv[])
     };
 
     while ((c = getopt_long(argc, argv, "c:hl:y", long_options, &option_index)) != -1) {
+        printf("c=%c\n", c);
         switch(c) {
             case 'c':
                 conf_file = optarg;
@@ -77,6 +78,8 @@ int main(int argc, char *argv[])
             default:
                 break;
         }
+        if (c == 'y')
+            break;
     }
     logger_init(log_file, 0);
 

@@ -40,7 +40,8 @@ static int cmd_help(int argc, char *argv[])
         char *tokens[1];
         string_split(cmd_list[i].name, "_", tokens, 1);
         if ((!strncmp("aw5808", tokens[0], strlen("aw5808")) && get_aw5808(0) == NULL) 
-            || (!strncmp("serial", tokens[0],strlen("serial")) && get_serial(0) == NULL)) {
+            || (!strncmp("serial", tokens[0],strlen("serial")) && get_serial(0) == NULL)
+            || (!strncmp("usb", tokens[0],strlen("usb")) && get_usb(0) == NULL)) {
             free(tokens[0]);
         } else {
             free(tokens[0]);
@@ -66,6 +67,7 @@ static command_t cmd_list[] = {
     { "usb_hid_enumerate", cmd_usb_hid_enumerate, "List all usb hid device" },
     { "usb_hid_list", cmd_usb_hid_list, "List available usb hid device" },
     { "usb_hid_write <index> <data1 data2 ...>", cmd_usb_hid_write, "Send hex data by usbhid" },
+    { "io", cmd_io, "Memory accesses via /dev/mem" },
     { "help", cmd_help, "Disply help info" },
     { NULL, NULL, NULL},
 };
@@ -96,6 +98,10 @@ static void stdin_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 static int shell_exec(int argc, char *argv[])
 {
     int ret = -1;
+
+    if (argc == 0)
+        return ret;
+
     command_t *cmd = shell_find_command(argv[0]);
     if (cmd) {
         ret = cmd->func(argc, argv);
