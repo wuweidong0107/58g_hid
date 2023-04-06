@@ -30,6 +30,7 @@ obj-y += common/
 obj-y += shell/
 obj-y += device/
 obj-y += codec/
+obj-y += websocket/
 obj-y += main.o
 
 all : 

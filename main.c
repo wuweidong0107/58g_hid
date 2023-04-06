@@ -7,6 +7,7 @@
 #include <ev.h>
 
 #include "log.h"
+#include "ws_server.h"
 #include "device.h"
 #include "thpool.h"
 #include "shell.h"
@@ -41,9 +42,9 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
 
 static void show_help(void)
 {
-    fprintf(stderr, "Usage:\n" );
-    fprintf(stderr, "  --config <filename>   Specify config file.\n" );
-    fprintf(stderr, "  --log <filename>      Log to file.\n" );
+    fprintf(stderr, "Usage:\n");
+    fprintf(stderr, "  --config <filename>   Specify config file.\n");
+    fprintf(stderr, "  --log <filename>      Log to file.\n");
     fprintf(stderr, "  -y                    Disable interactive mode.\n");
 }
 
@@ -100,6 +101,11 @@ int main(int argc, char *argv[])
     ev_signal_init(&signal_watcher, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_watcher);
 
+    if (ws_server(thpool) != 0) {
+        log_error("websocket server start fail");
+        exit(1);
+    }
+    
     /* setup menu */
     shell_init(loop, argc - optind, argv + optind, mode);
     shell_printf("Build time: %s %s\n", __DATE__, __TIME__);
