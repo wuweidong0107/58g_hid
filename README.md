@@ -14,6 +14,15 @@ $ ./devctl -c ./conf.d/devctl.conf -m 1
 $ ./devctl -c ./conf.d/devctl.conf -m 2
 ```
 
+访问 server:
+```
+# http server
+http://localhost:8000/
+
+# websocket server
+ws://localhost:8000/websocket
+```
+
 # Reference
 https://www.usb.org/sites/default/files/hid1_11.pdf
 

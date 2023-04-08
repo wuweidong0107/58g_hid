@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
                 log_error("websocket server start fail");
                 exit(1);
             }
-            log_info("Starting wesocket listener on %s/websocket", ws_server_url);
+            log_info("Starting websocket listener on %s/websocket", ws_server_url);
             ev_run(loop, 0);
             ws_server_exit();
             break;
