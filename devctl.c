@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <ev.h>
 
+#include "devctl.h"
 #include "log.h"
 #include "ws_server.h"
 #include "device.h"
@@ -14,6 +15,7 @@
 
 threadpool thpool;
 static struct ev_loop *loop;
+static const char *ws_server_url = "ws://localhost:8000";
 
 static int logger_init(const char *log_file, int verbose)
 {
@@ -43,9 +45,13 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
 static void show_help(void)
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  --config <filename>   Specify config file.\n");
-    fprintf(stderr, "  --log <filename>      Log to file.\n");
-    fprintf(stderr, "  -y                    Disable interactive mode.\n");
+    fprintf(stderr, "    devctl <-c config_file> [-l config file] <-m mode> [-r command]\n");
+    fprintf(stderr, "       --config <filename>   Specify config file.\n");
+    fprintf(stderr, "       --log <filename>      Log to file.\n");
+    fprintf(stderr, "       --mode <mode>         Select run mode. 0: normal, 1: shell, 2: server\n");
+    fprintf(stderr, "       --run <command>       Specify command in normal mode\n");
+    fprintf(stderr, "    exmaple:\n");
+    fprintf(stderr, "       devctl -c ./conf.d/devctl.conf -m 0 -r io\n");
 }
 
 int main(int argc, char *argv[])
@@ -53,16 +59,18 @@ int main(int argc, char *argv[])
     int c, option_index = 0;
     char *log_file = NULL;
     char *conf_file = "/etc/devctl.conf";
-    bool mode = true;
+    char *command = NULL;
+    int mode = -1;
 
     struct option long_options[] = {
         {"config", required_argument, 0, 'c'},
         {"log", required_argument, 0, 'l'},
+        {"mode", required_argument, 0, 'm'},
+        {"run", required_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "c:hl:y", long_options, &option_index)) != -1) {
-        printf("c=%c\n", c);
+    while ((c = getopt_long(argc, argv, "c:hl:m:r:", long_options, &option_index)) != -1) {
         switch(c) {
             case 'c':
                 conf_file = optarg;
@@ -70,26 +78,38 @@ int main(int argc, char *argv[])
             case 'l':
                 log_file = optarg;
                 break;
+            case 'm':
+                mode = atoi(optarg);
+                break;
             case 'h':
                 show_help();
                 return 0;
-            case 'y':
-                mode = false;
+            case 'r':
+                command = optarg;
                 break;
             default:
                 break;
         }
-        if (c == 'y')
-            break;
     }
-    logger_init(log_file, 0);
 
+    if (mode == -1 \
+        || (mode == MODE_NORMAL && command == NULL)) {
+        show_help();
+        exit(1);
+    }
+
+    logger_init(log_file, 0);
+    log_info("Build time: %s %s", __DATE__, __TIME__);
+    log_info("Config file: %s", conf_file);
+
+    /* init thread pool */
     thpool = thpool_init(4);
     if (thpool == NULL) {
         log_error("thpool_init() fail");
         exit(1);
     }
 
+    /* init hardware device */
     if (devices_init(loop, conf_file) < 0) {
         log_error("devices_init() fail");
         exit(1);
@@ -101,19 +121,35 @@ int main(int argc, char *argv[])
     ev_signal_init(&signal_watcher, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_watcher);
 
-    if (ws_server(thpool) != 0) {
-        log_error("websocket server start fail");
-        exit(1);
+    /* real work */    
+    switch(mode) {
+        case MODE_NORMAL:
+            /* run a command */
+            shell_init(loop, argc - optind, argv + optind, mode);
+            shell_exec(command);
+            shell_exit(loop, mode);
+            break;
+        case MODE_SHELL:
+            /* setup menu */
+            shell_init(loop, argc - optind, argv + optind, mode);
+            shell_printf("");
+            ev_run(loop, 0);
+            shell_exit(loop, mode);
+            break;
+        case MODE_SERVER:
+            /* setup websocket server */
+            if (ws_server_init(thpool, ws_server_url) != 0) {
+                log_error("websocket server start fail");
+                exit(1);
+            }
+            log_info("Starting wesocket listener on %s/websocket", ws_server_url);
+            ev_run(loop, 0);
+            ws_server_exit();
+            break;
     }
-    
-    /* setup menu */
-    shell_init(loop, argc - optind, argv + optind, mode);
-    shell_printf("Build time: %s %s\n", __DATE__, __TIME__);
-    shell_printf("Config file: %s\n", conf_file);
-    shell_run(loop);
 
     /* cleanup */
-    shell_exit(loop);
+    log_info("Cleaning...");
     devices_exit();
     ev_loop_destroy(loop);
     thpool_wait(thpool);

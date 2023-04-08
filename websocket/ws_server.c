@@ -2,8 +2,9 @@
 #include "ws_server.h"
 #include "mongoose.h"
 
-static const char *s_listen_on = "ws://localhost:8000";
+static const char *s_listen_on = NULL;
 static const char *s_web_root = ".";
+static int exiting = 0;
 
 static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data)
 {
@@ -35,13 +36,22 @@ static void task_ws_server(void *arg)
 {
     struct mg_mgr mgr;  // Event manager
     mg_mgr_init(&mgr);  // Initialise event manager
-    printf("Starting WS listener on %s/websocket\n", s_listen_on);
     mg_http_listen(&mgr, s_listen_on, fn, NULL);  // Create HTTP listener
-    for (;;) mg_mgr_poll(&mgr, 1000);             // Infinite event loop
+    while (!exiting) {
+        mg_mgr_poll(&mgr, 1000);             // Infinite event loop
+    }
     mg_mgr_free(&mgr);
 }
 
-int ws_server(threadpool thpool)
+int ws_server_init(threadpool thpool, const char *url)
 {
+    if (thpool == NULL || url == NULL)
+        return -1;
+    s_listen_on = url;
     return thpool_add_work(thpool, task_ws_server, NULL);
+}
+
+void ws_server_exit(void)
+{
+   exiting = 1;
 }

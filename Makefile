@@ -31,14 +31,15 @@ obj-y += shell/
 obj-y += device/
 obj-y += codec/
 obj-y += websocket/
-obj-y += main.o
+obj-y += devctl.o
 
 all : 
 	make -C ./ -f $(TOPDIR)/Makefile.build
 	$(CC) -o $(TARGET) built-in.o $(LDFLAGS)
 
 clean:
-	rm -f $(shell find -type f -name "*.o")
-	rm -f $(shell find -type f -name "*.d")
-	rm -f $(TARGET)
+	@echo "cleaning..."
+	@rm -f $(shell find -type f -name "*.o")
+	@rm -f $(shell find -type f -name "*.d")
+	@rm -f $(TARGET)
 	

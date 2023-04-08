@@ -9,6 +9,7 @@
 #include <ev.h>
 #include <wordexp.h>
 
+#include "devctl.h"
 #include "log.h"
 #include "shell.h"
 #include "shell_internal.h"
@@ -26,7 +27,7 @@ static command_t cmd_list[];
 static struct context {
     int argc;
     char **argv;
-    bool mode;          // interactive 
+    int mode;
     /* io */
     struct ev_loop *loop;
     ev_io stdin_watcher;
@@ -95,16 +96,73 @@ static void stdin_cb(struct ev_loop *loop, struct ev_io *w, int revents)
     rl_callback_read_char();
 }
 
-static int shell_exec(int argc, char *argv[])
+static void process_line(char *line)
+{
+    if (line == NULL) {
+        ev_break(ctx.loop, EVBREAK_ALL);
+        rl_callback_handler_remove();
+    } else {
+        if (*line != '\0')
+            add_history(line);
+        shell_exec(line);
+        free(line);
+    }
+}
+
+void shell_printf(const char *fmt, ...)
+{
+    va_list args;
+    bool save_input;
+    char *saved_line;
+    int saved_point;
+
+    if (ctx.mode == MODE_SHELL) {
+        save_input = !RL_ISSTATE(RL_STATE_DONE);
+        if (save_input) {
+            saved_point = rl_point;
+            saved_line = rl_copy_text(0, rl_end);
+            rl_save_prompt();
+            rl_replace_line("", 0);
+            rl_redisplay();
+        }
+
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
+
+        if (save_input) {
+            rl_restore_prompt();
+            rl_replace_line(saved_line, 0);
+            rl_point = saved_point;
+            rl_forced_update_display();
+            free(saved_line);
+        }
+    } else {
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
+    }
+}
+
+int shell_exec(const char *command)
 {
     int ret = -1;
 
-    if (argc == 0)
-        return ret;
+    if (command == NULL)
+        return -1;
 
-    command_t *cmd = shell_find_command(argv[0]);
+    wordexp_t w;
+    if (wordexp(command, &w, WRDE_NOCMD))
+        return -1;
+
+    if (w.we_wordc == 0) {
+        wordfree(&w);
+        return -1;
+    }
+    
+    command_t *cmd = shell_find_command(w.we_wordv[0]);
     if (cmd) {
-        ret = cmd->func(argc, argv);
+        ret = cmd->func(w.we_wordc, w.we_wordv);
         switch(ret) {
             case 0:
                 break;
@@ -119,71 +177,20 @@ static int shell_exec(int argc, char *argv[])
             default:
                 shell_printf("Command exec fail, ret=%d\n", ret);
         }
-        return ret;
+    } else {
+        cmd_help(0, NULL);
     }
-    cmd_help(0, NULL);
+
+    wordfree(&w);
     return ret;
 }
 
-static void process_line(char *line)
-{
-    if (line == NULL) {
-        ev_break(ctx.loop, EVBREAK_ALL);
-        rl_callback_handler_remove();
-    } else {
-        if (*line != '\0')
-            add_history(line);
-        
-        wordexp_t w;
-        if (wordexp(line, &w, WRDE_NOCMD))
-            return;
-
-        if (w.we_wordc == 0) {
-            wordfree(&w);
-            return;
-        }
-        
-        shell_exec(w.we_wordc, w.we_wordv);
-        wordfree(&w);
-        free(line);
-    }
-}
-
-void shell_printf(const char *fmt, ...)
-{
-    va_list args;
-    bool save_input;
-    char *saved_line;
-    int saved_point;
-
-    save_input = !RL_ISSTATE(RL_STATE_DONE);
-    if (save_input) {
-        saved_point = rl_point;
-        saved_line = rl_copy_text(0, rl_end);
-        rl_save_prompt();
-        rl_replace_line("", 0);
-        rl_redisplay();
-    }
-
-    va_start(args, fmt);
-    vprintf(fmt, args);
-    va_end(args);
-
-    if (save_input) {
-        rl_restore_prompt();
-        rl_replace_line(saved_line, 0);
-        rl_point = saved_point;
-        rl_forced_update_display();
-        free(saved_line);
-    }
-}
-
-int shell_init(struct ev_loop *loop, int argc, char **argv, bool mode)
+int shell_init(struct ev_loop *loop, int argc, char **argv, int mode)
 {
     int ret = 0;
 
-	ctx.argc = argc;
-	ctx.argv = argv;
+    ctx.argc = argc;
+    ctx.argv = argv;
     ctx.mode = mode;
     ctx.loop = loop;
     
@@ -194,33 +201,23 @@ int shell_init(struct ev_loop *loop, int argc, char **argv, bool mode)
     if ((ret = usb_shell_init()))
         return ret;
     
-    if (ctx.mode == false)
-        return ret;
+    if (ctx.mode == MODE_SHELL) {
+        ev_io_init(&ctx.stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
+        ev_io_start(ctx.loop, &ctx.stdin_watcher);
 
-    ev_io_init(&ctx.stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
-    ev_io_start(loop, &ctx.stdin_watcher);
-
-    fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
-    rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
-    rl_set_prompt(PROMPT_ON);
+        fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
+        rl_callback_handler_install(NULL, (rl_vcpfunc_t*) &process_line);
+        rl_set_prompt(PROMPT_ON);
+    }
     return ret;
 }
 
-int shell_run(struct ev_loop *loop)
+void shell_exit(struct ev_loop *loop, int mode)
 {
-    int status = 0;
-    if (ctx.mode == false) {
-        status = shell_exec(ctx.argc, ctx.argv);
-    } else {
-        ev_run(loop, 0);
+    if (ctx.mode == MODE_SHELL) {
+        rl_callback_handler_remove();
+        ev_io_stop(loop, &ctx.stdin_watcher);
     }
-    return status;
-}
-
-void shell_exit(struct ev_loop *loop)
-{
-    rl_callback_handler_remove();
-    ev_io_stop(loop, &ctx.stdin_watcher);
 
     aw5808_shell_exit();
     serial_shell_exit();

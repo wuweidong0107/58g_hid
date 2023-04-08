@@ -38,10 +38,15 @@ static void stdout_callback(log_Event *ev)
         buf, level_colors[ev->level], level_strings[ev->level],
         ev->file, ev->line);
 #else
-    if (ev->level != LOG_INFO)
+    if (ev->level == LOG_INFO) {
+        fprintf(
+            ev->udata, "%s %-5s: ",
+            buf, level_strings[ev->level]);
+    } else {
         fprintf(
             ev->udata, "%s %-5s %s %s() %d: ",
             buf, level_strings[ev->level], ev->file, ev->function, ev->line);
+    }
 #endif
     vfprintf(ev->udata, ev->fmt, ev->ap);
     fprintf(ev->udata, "\n");
