@@ -15,7 +15,7 @@ export AS LD CC CPP AR NM
 export STRIP OBJCOPY OBJDUMP
 
 CFLAGS := -Wall -O2 -g
-CFLAGS += -I$(shell pwd)/ -I$(shell pwd)/include -I$(shell pwd)/device -I$(shell pwd)/codec/
+CFLAGS += -I$(shell pwd)/ -I$(shell pwd)/include -I$(shell pwd)/device -I$(shell pwd)/device/wifi -I$(shell pwd)/codec/ 
 
 LDFLAGS := -lreadline -lpthread -lev -ludev -lusb-1.0
 
