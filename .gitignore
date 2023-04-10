@@ -4,3 +4,6 @@
 *.o.d
 *.o
 /devctl
+/GPATH
+/GRTAGS
+/GTAGS
