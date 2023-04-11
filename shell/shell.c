@@ -54,6 +54,7 @@ static int cmd_help(int argc, char *argv[])
 }
 
 static command_t cmd_list[] = {
+    { "aw5808", cmd_aw5808, "control aw5808 device" },
     { "aw5808_list", cmd_aw5808_list, "List available aw5808 device" },
     { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
     { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
@@ -194,7 +195,7 @@ int shell_init(struct ev_loop *loop, int argc, char **argv, int mode)
     ctx.mode = mode;
     ctx.loop = loop;
     
-    if ((ret = aw5808_shell_init()))
+    if ((ret = menu_aw5808_init()))
         return ret;
     if ((ret = serial_shell_init()))
         return ret;
@@ -219,7 +220,7 @@ void shell_exit(struct ev_loop *loop, int mode)
         ev_io_stop(loop, &ctx.stdin_watcher);
     }
 
-    aw5808_shell_exit();
+    menu_aw5808_exit();
     serial_shell_exit();
     usb_shell_exit();
 }

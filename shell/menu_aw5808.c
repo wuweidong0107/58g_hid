@@ -283,7 +283,31 @@ int cmd_aw5808_set_rfpower(int argc, char *argv[])
     return ret;
 }
 
-static struct aw5808_client_ops aw5808_menu_ops = {
+static help(void)
+{
+    shell_printf("Usage: aw5808 <opr> [args]");
+    shell_printf("  Available opr: select_device <index>, default 0");
+    shell_printf("                 hid_set_channel <channel>");
+    shell_printf("                 hid_set_mute <mute>");
+    shell_printf("                 hid_get_status");
+    shell_printf("                 uart_select_mode <mode>");
+    shell_printf("                 uart_set_channel <channel>");
+    shell_printf("                 uart_req_pair");
+    shell_printf("  Available args: mode, usb / i2s");
+    shell_printf("                  channel, 1 ~ 8");
+    shell_printf("                  mute, 0 ~ 1");
+    shell_printf("                  freqmode, fix / auto");
+    shell_printf("  Example:  aw5808 hid_set_channel 4");
+    shell_printf("            aw5808 hid_set_mute 0");
+    shell_printf("            aw5808 hid_get_status");
+    shell_printf("            aw5808 uart_set_channel");
+    shell_printf("            aw5808 uart_set_freqmode");
+    shell_printf("            aw5808 uart_get_config");
+    shell_printf("            aw5808 uart_get_rfstatus");
+
+}
+
+static struct aw5808_client_ops menu_aw5808_ops = {
     .on_get_config = on_aw5808_get_config,
     .on_get_rfstatus = on_aw5808_get_rfstatus,
     .on_notify_rfstatus = on_aw5808_notify_rfstatus,
@@ -295,29 +319,39 @@ static struct aw5808_client_ops aw5808_menu_ops = {
     .on_set_rfpower = on_aw5808_set_rfpower,
 };
 
-static struct aw5808_client aw5808_menu = {
-    .name = "aw5808 menu",
-    .ops = &aw5808_menu_ops,
+static struct aw5808_client menu_aw5808 = {
+    .name = "menu aw5808",
+    .ops = &menu_aw5808_ops,
 };
 
-int aw5808_shell_init(void)
+int cmd_aw5808(int argc, char *argv[])
+{
+    int i;
+
+    for(i=0; i<argc; i++) {
+        printf("%d: %s\n", i, argv[i]);
+    }
+    return 0;
+}
+
+int menu_aw5808_init(void)
 {
     int i, ret;
     aw5808_t *aw;
 
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
-        if ((ret = aw5808_add_client(aw, &aw5808_menu)))
+        if ((ret = aw5808_add_client(aw, &menu_aw5808)))
             return ret;
     }
     return 0;
 }
 
-void aw5808_shell_exit(void)
+void menu_aw5808_exit(void)
 {
     int i;
     aw5808_t *aw;
 
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
-        aw5808_remove_client(aw, &aw5808_menu);
+        aw5808_remove_client(aw, &menu_aw5808);
     }
 }

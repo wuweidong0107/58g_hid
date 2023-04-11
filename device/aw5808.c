@@ -251,7 +251,7 @@ static int on_serial_receive(serial_t *serial, const uint8_t *buf, size_t len)
         ret = codec_serial->decode(buf, len, &data, &data_len);
         if (!data)
             break;
-#if 1
+#if 0
         int i;
         printf("----------buf_len=%ld\n", len);
         for(i=0; i<len; i++) {
@@ -647,14 +647,12 @@ int aw5808_add_client(aw5808_t *aw, struct aw5808_client *client)
 {
     if (!client || !client->ops)
         return -1;
-    printf("%s: %s\n", __func__, client->name);
     list_add_tail(&client->list, &aw->clients);
     return 0;
 }
 
 void aw5808_remove_client(aw5808_t *aw, struct aw5808_client *client)
 {
-    printf("%s: %s\n", __func__, client->name);
     if (!client)
         return;
     list_del(&client->list);

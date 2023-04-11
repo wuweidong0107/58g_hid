@@ -23,11 +23,9 @@ static struct aw5808_client ws_aw5808 = {
     .ops = &ws_aw5808_ops,
 };
 
-int ws_aw5808_get_config(int argc, char *argv[])
+int ws_aw5808_get_config(const char *json)
 {
     int index = 0, ret;
-    if (argc == 2)
-        index = strtoul(argv[1], NULL, 10);
 
     aw5808_t *aw = get_aw5808(index);
     if (aw == NULL)

@@ -109,17 +109,17 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    /* init hardware device */
-    if (devices_init(loop, conf_file) < 0) {
-        log_error("devices_init() fail");
-        exit(1);
-    }
-
     /* setup async io */
     loop = ev_loop_new(EVBACKEND_EPOLL);
     ev_signal signal_watcher;
     ev_signal_init(&signal_watcher, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_watcher);
+
+    /* init hardware device */
+    if (devices_init(loop, conf_file) < 0) {
+        log_error("devices_init() fail");
+        exit(1);
+    }
 
     /* real work */    
     switch(mode) {
