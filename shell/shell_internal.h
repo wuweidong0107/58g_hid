@@ -13,7 +13,6 @@ extern int cmd_aw5808_list(int argc, char *argv[]);
 extern int cmd_aw5808_get_config(int argc, char *argv[]);
 extern int cmd_aw5808_get_rfstatus(int argc, char *argv[]);
 extern int cmd_aw5808_pair(int argc, char *argv[]);
-extern int cmd_aw5808_set_mode(int argc, char *argv[]);
 extern int cmd_aw5808_set_i2s_mode(int argc, char *argv[]);
 extern int cmd_aw5808_set_connect_mode(int argc, char *argv[]);
 extern int cmd_aw5808_set_rfchannel(int argc, char *argv[]);

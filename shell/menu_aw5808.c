@@ -5,6 +5,8 @@
 #include "aw5808.h"
 #include "device.h"
 
+static aw5808_t *current = NULL;
+
 static void on_aw5808_get_config(aw5808_t *aw, uint16_t firmware_version, uint8_t mcu_verison,
         aw5808_mode_t mode, uint8_t rf_channel, uint8_t rf_power)
 {
@@ -47,8 +49,6 @@ static void on_aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
         case AW5808_MODE_USB:
             shell_printf("mode is usb.\n");
             break;
-        default:
-            shell_printf("unknown mode(%x).\n", mode);
     }
 }
 
@@ -145,33 +145,6 @@ int cmd_aw5808_pair(int argc, char *argv[])
         return -EINVAL;
 
     if ((ret = aw5808_pair(aw)) != 0)
-        log_info("%s", aw5808_errmsg(aw));
-
-    return ret;
-}
-
-int cmd_aw5808_set_mode(int argc, char *argv[])
-{
-    int index, mode, ret;
-    if (argc == 2)
-        index = 0;
-    else if (argc == 3)
-        index = strtoul(argv[1], NULL, 10);
-    else
-        return -EINVAL;
-    
-    if(!strncasecmp("i2s", argv[argc-1], 3))
-        mode = AW5808_MODE_I2S;
-    else if(!strncasecmp("usb", argv[argc-1], 3))
-        mode = AW5808_MODE_USB;
-    else
-        return -EINVAL;
-    
-    aw5808_t *aw = get_aw5808(index);
-    if (aw == NULL)
-        return -EINVAL;
-
-    if ((ret = aw5808_set_mode(aw, mode)) != 0)
         log_info("%s", aw5808_errmsg(aw));
 
     return ret;
@@ -283,28 +256,45 @@ int cmd_aw5808_set_rfpower(int argc, char *argv[])
     return ret;
 }
 
-static help(void)
+static int uart_select_mode(const char *mode_str)
 {
-    shell_printf("Usage: aw5808 <opr> [args]");
-    shell_printf("  Available opr: select_device <index>, default 0");
-    shell_printf("                 hid_set_channel <channel>");
-    shell_printf("                 hid_set_mute <mute>");
-    shell_printf("                 hid_get_status");
-    shell_printf("                 uart_select_mode <mode>");
-    shell_printf("                 uart_set_channel <channel>");
-    shell_printf("                 uart_req_pair");
-    shell_printf("  Available args: mode, usb / i2s");
-    shell_printf("                  channel, 1 ~ 8");
-    shell_printf("                  mute, 0 ~ 1");
-    shell_printf("                  freqmode, fix / auto");
-    shell_printf("  Example:  aw5808 hid_set_channel 4");
-    shell_printf("            aw5808 hid_set_mute 0");
-    shell_printf("            aw5808 hid_get_status");
-    shell_printf("            aw5808 uart_set_channel");
-    shell_printf("            aw5808 uart_set_freqmode");
-    shell_printf("            aw5808 uart_get_config");
-    shell_printf("            aw5808 uart_get_rfstatus");
+    int ret, mode = AW5808_MODE_I2S;
 
+    if (current == NULL)
+        return -EINVAL;
+
+    if(!strncmp(mode_str, "i2s", strlen("i2s")))
+        mode = AW5808_MODE_I2S;
+    else if(!strncasecmp(mode_str, "usb", strlen("usb")))
+        mode = AW5808_MODE_USB;
+    else
+        return -EINVAL;
+
+    if ((ret = aw5808_set_mode(current, mode)) != 0)
+        log_info("%s", aw5808_errmsg(current));
+
+    return ret;
+}
+
+static void help(void)
+{
+    shell_printf("Usage: aw5808 <opr> [args]\n");
+    shell_printf("  Available opr: uart_select_mode <mode>\n");
+    shell_printf("                 uart_set_channel <channel>\n");
+    shell_printf("                 hid_set_channel <channel>\n");
+    shell_printf("                 hid_set_mute <mute>\n");
+    shell_printf("                 hid_get_status\n");
+    shell_printf("  Available args: mode, usb / i2s\n");
+    shell_printf("                  channel, 1 ~ 8\n");
+    shell_printf("                  mute, 0 ~ 1\n");
+    shell_printf("                  freqmode, fix / auto\n");
+    shell_printf("  Example:  aw5808 hid_set_channel 4\n");
+    shell_printf("            aw5808 hid_set_mute 0\n");
+    shell_printf("            aw5808 hid_get_status\n");
+    shell_printf("            aw5808 uart_set_channel\n");
+    shell_printf("            aw5808 uart_set_freqmode\n");
+    shell_printf("            aw5808 uart_get_config\n");
+    shell_printf("            aw5808 uart_get_rfstatus\n");
 }
 
 static struct aw5808_client_ops menu_aw5808_ops = {
@@ -331,7 +321,17 @@ int cmd_aw5808(int argc, char *argv[])
     for(i=0; i<argc; i++) {
         printf("%d: %s\n", i, argv[i]);
     }
-    return 0;
+
+    if (argc < 3) {
+        help();
+        return 0;
+    }
+
+    if (!strncmp(argv[1], "uart_select_mode", strlen("uart_select_mode"))) {
+        return uart_select_mode(argv[2]);
+    }
+
+    return -1;
 }
 
 int menu_aw5808_init(void)
@@ -343,6 +343,8 @@ int menu_aw5808_init(void)
         if ((ret = aw5808_add_client(aw, &menu_aw5808)))
             return ret;
     }
+
+    current = get_aw5808(0);
     return 0;
 }
 
@@ -351,6 +353,7 @@ void menu_aw5808_exit(void)
     int i;
     aw5808_t *aw;
 
+    current = NULL;
     for (i=0; (aw=get_aw5808(i)) != NULL; i++) {
         aw5808_remove_client(aw, &menu_aw5808);
     }

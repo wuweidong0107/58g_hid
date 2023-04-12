@@ -59,7 +59,6 @@ static command_t cmd_list[] = {
     { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
     { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },
     { "aw5808_pair [index]", cmd_aw5808_pair, "Pair aw5808 with headphone" },
-    { "aw5808_setmode [index] <i2s|usb>", cmd_aw5808_set_mode, "Set aw5808 mode" },
     { "aw5808_seti2smode [index] <master|slave>", cmd_aw5808_set_i2s_mode, "Set aw5808 i2s mode" },
     { "aw5808_setconnmode [index] <multi|single>", cmd_aw5808_set_connect_mode, "Set aw5808 connect mode" },
     { "aw5808_setrfchannel [index] <1-8>", cmd_aw5808_set_rfchannel, "Set aw5808 RF channel" },
@@ -195,12 +194,9 @@ int shell_init(struct ev_loop *loop, int argc, char **argv, int mode)
     ctx.mode = mode;
     ctx.loop = loop;
     
-    if ((ret = menu_aw5808_init()))
-        return ret;
-    if ((ret = serial_shell_init()))
-        return ret;
-    if ((ret = usb_shell_init()))
-        return ret;
+    menu_aw5808_init();
+    serial_shell_init();
+    usb_shell_init();
     
     if (ctx.mode == MODE_SHELL) {
         ev_io_init(&ctx.stdin_watcher, stdin_cb, fileno(stdin), EV_READ);
@@ -220,7 +216,7 @@ void shell_exit(struct ev_loop *loop, int mode)
         ev_io_stop(loop, &ctx.stdin_watcher);
     }
 
-    menu_aw5808_exit();
-    serial_shell_exit();
     usb_shell_exit();
+    serial_shell_exit();
+    menu_aw5808_exit();
 }
