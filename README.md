@@ -1,6 +1,11 @@
 # Intro
 All kinds of embedded linux device control utils
 
+# Dependency
+```
+$ libev libusb libreadline
+```
+
 # Usage
 example:
 ```

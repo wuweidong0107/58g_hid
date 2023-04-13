@@ -61,8 +61,6 @@ static void on_aw5808_set_i2s_mode(aw5808_t *aw, aw5808_i2s_mode_t mode)
         case AW5808_MODE_I2S_SLAVE:
             shell_printf("i2s mode is slave.\n");
             break;
-        default:
-            shell_printf("unknown i2s mode(%x).\n", mode);
     }
 }
 
@@ -75,8 +73,6 @@ static void on_aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode)
         case AW5808_MODE_CONN_SINGLE:
             shell_printf("connect mode is single.\n");
             break;
-        default:
-            shell_printf("unknown connect mode(%x).\n", mode);
     }
 }
 
