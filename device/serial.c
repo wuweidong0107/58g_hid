@@ -246,7 +246,7 @@ static void _serial_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 
 int serial_open(serial_t *serial, const char *path, uint32_t baudrate, struct ev_loop *loop)
 {
-    snprintf(serial->ident, sizeof(serial->ident)-1, "%s %d", path, baudrate);
+    snprintf(serial->ident, sizeof(serial->ident)-1, "%s (%d)", path, baudrate);
     serial->loop = loop;
     return serial_open_advanced(serial, path, baudrate, 8, PARITY_NONE, 1, false, false);
 }

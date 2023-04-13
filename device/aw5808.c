@@ -13,9 +13,12 @@
 #include "utils.h"
 #include "io_channel.h"
 
+#define AW5808_VID_PID "25A7:5830"
+
 enum aw5808_usbid {
     AW5808_USB_VID = 0x25a7,
-    AW5808_USB_PID = 0x5804,
+    //AW5808_USB_PID = 0x5804,
+    AW5808_USB_PID=0x5830,
 };
 
 enum aw5808_58g_rw {
@@ -94,14 +97,14 @@ static void udev_read_cb(struct ev_loop *loop, struct ev_io *w, int revents)
         printf("MACADDR=%s\n", udev_device_get_sysattr_value(dev, "address"));
         printf("DEVNODE=%s\n", udev_device_get_devnode(dev));
 #endif
-        if (strstr(udev_device_get_devpath(dev), "25A7:5804") != NULL) {
+        if (strstr(udev_device_get_devpath(dev), AW5808_VID_PID) != NULL) {
             if (!strcmp(udev_device_get_action(dev), "add")) {
                 if(hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop) != 0)
                     log_error("Opening hidraw in udev");
                 aw->mode = AW5808_MODE_USB;
             } else if (!strcmp(udev_device_get_action(dev), "remove")) {
                 hidraw_close(aw->hidraw);
-                aw->mode = AW5808_MODE_I2S;
+                aw->mode = AW5808_MODE_UNKNOWN;
             }
         }
         udev_device_unref(dev);
@@ -363,7 +366,21 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
     if(!opt->serial && !opt->usb)
         return _error(aw, AW5808_ERROR_OPEN, 0, "No serial or usb specifed", opt->serial);
 
-    bool is_serial_init = false;
+    if (opt->usb) {
+        strncpy(aw->usb_name, opt->usb, sizeof(aw->usb_name)-1);
+    }
+
+    // 尝试打开 hid，用于处理模块当前已处于 USB 模式的情况，允许失败。
+    hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, opt->loop);
+
+    aw->loop = opt->loop;
+    aw->mon = udev_monitor_new_from_netlink(aw->udev, "udev");
+    udev_monitor_filter_add_match_subsystem_devtype(aw->mon, "hidraw", NULL);
+    udev_monitor_enable_receiving(aw->mon);
+    aw->udev_fd = udev_monitor_get_fd(aw->mon);
+    ev_io_init(&aw->udev_io.ior, udev_read_cb, aw->udev_fd, EV_READ);
+    ev_io_start(aw->loop, &aw->udev_io.ior);
+
     if (opt->serial) {
         if (serial_open(aw->serial, opt->serial, 57600, opt->loop) !=0) {
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
@@ -379,27 +396,8 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 	     log_error("aw5808_set_mode_sync fail: %s", aw5808_errmsg(aw));
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 set mode");
         }
-        is_serial_init = true;
     }
 
-    if (opt->usb) {
-        strncpy(aw->usb_name, opt->usb, sizeof(aw->usb_name)-1);
-        aw->mon = udev_monitor_new_from_netlink(aw->udev, "udev");
-        udev_monitor_filter_add_match_subsystem_devtype(aw->mon, "hidraw", NULL);
-        udev_monitor_enable_receiving(aw->mon);
-        aw->udev_fd = udev_monitor_get_fd(aw->mon);
-        aw->loop = opt->loop;
-        ev_io_init(&aw->udev_io.ior, udev_read_cb, aw->udev_fd, EV_READ);
-        ev_io_start(aw->loop, &aw->udev_io.ior);
-    
-        /* if fail as hidraw not ready yet, will reopen it at udev callback. */
-        if (hidraw_open(aw->hidraw, NULL, AW5808_USB_VID, AW5808_USB_PID, aw->usb_name, aw->loop)) {
-            log_warn("hidraw not ready yet");
-            if (is_serial_init == false)
-                return _error(aw, AW5808_ERROR_OPEN, 0, "Neither usb / uart is wokring");
-        }
-    }
-    
     aw->i2s_mode = AW5808_MODE_I2S_UNKNOWN;
     aw->conn_mode = AW5808_MODE_CONN_UNKNOWN;
     return 0;

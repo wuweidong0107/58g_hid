@@ -219,7 +219,7 @@ int hidraw_open(hidraw_t *hidraw, const char *path, uint16_t vendor_id, uint16_t
         }
         if (i >= globres.gl_pathc)
             return _error(hidraw, HID_ERROR_OPEN, 0, "Searching hidraw device %x-%x", vendor_id, product_id);
-        snprintf(hidraw->ident, sizeof(hidraw->ident)-1, "%s(%s)", globres.gl_pathv[i], buf);
+        snprintf(hidraw->ident, sizeof(hidraw->ident)-1, "%s (%s)", globres.gl_pathv[i], buf);
         globfree(&globres);
     }
     hidraw->fd = fd;

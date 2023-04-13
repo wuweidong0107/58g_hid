@@ -49,6 +49,9 @@ static void on_aw5808_set_mode(aw5808_t *aw, aw5808_mode_t mode)
         case AW5808_MODE_USB:
             shell_printf("mode is usb.\n");
             break;
+        case AW5808_MODE_UNKNOWN:
+            shell_printf("mode is unknown.\n");
+            break;
     }
 }
 
@@ -61,6 +64,9 @@ static void on_aw5808_set_i2s_mode(aw5808_t *aw, aw5808_i2s_mode_t mode)
         case AW5808_MODE_I2S_SLAVE:
             shell_printf("i2s mode is slave.\n");
             break;
+        case AW5808_MODE_I2S_UNKNOWN:
+            shell_printf("i2s mode is unknown.\n");
+            break;
     }
 }
 
@@ -72,6 +78,9 @@ static void on_aw5808_set_connect_mode(aw5808_t *aw, aw5808_connect_mode_t mode)
             break;
         case AW5808_MODE_CONN_SINGLE:
             shell_printf("connect mode is single.\n");
+            break;
+        case AW5808_MODE_CONN_UNKNOWN:
+            shell_printf("connect mode is unknown.\n");
             break;
     }
 }
