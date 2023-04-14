@@ -61,16 +61,18 @@ int main(int argc, char *argv[])
     char *conf_file = "/etc/devctl.conf";
     char *command = NULL;
     int mode = -1;
+    int log_level = LOG_INFO;
 
     struct option long_options[] = {
         {"config", required_argument, 0, 'c'},
         {"log", required_argument, 0, 'l'},
         {"mode", required_argument, 0, 'm'},
         {"run", required_argument, 0, 'r'},
+        {"quiet", no_argument, 0, 'q'},
         {0, 0, 0, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "c:hl:m:r:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "c:hl:m:qr:", long_options, &option_index)) != -1) {
         switch(c) {
             case 'c':
                 conf_file = optarg;
@@ -80,6 +82,9 @@ int main(int argc, char *argv[])
                 break;
             case 'm':
                 mode = atoi(optarg);
+                break;
+            case 'q':
+                log_level = LOG_WARN;
                 break;
             case 'h':
                 show_help();
@@ -99,6 +104,7 @@ int main(int argc, char *argv[])
     }
 
     logger_init(log_file, 0);
+    log_set_level(log_level);
     log_info("Build time: %s %s", __DATE__, __TIME__);
     log_info("Config file: %s", conf_file);
 

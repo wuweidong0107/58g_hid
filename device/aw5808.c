@@ -363,9 +363,6 @@ void aw5808_free(aw5808_t *aw)
 
 int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
 {   
-    if(!opt->serial && !opt->usb)
-        return _error(aw, AW5808_ERROR_OPEN, 0, "No serial or usb specifed", opt->serial);
-
     if (opt->usb) {
         strncpy(aw->usb_name, opt->usb, sizeof(aw->usb_name)-1);
     }
@@ -381,7 +378,7 @@ int aw5808_open(aw5808_t *aw, aw5808_options_t *opt)
     ev_io_init(&aw->udev_io.ior, udev_read_cb, aw->udev_fd, EV_READ);
     ev_io_start(aw->loop, &aw->udev_io.ior);
 
-    if (opt->serial) {
+    if (opt->serial && access(opt->serial, R_OK|W_OK) == 0) {
         if (serial_open(aw->serial, opt->serial, 57600, opt->loop) !=0) {
             return _error(aw, AW5808_ERROR_OPEN, 0, "Openning aw5808 serial %s", opt->serial);
         }

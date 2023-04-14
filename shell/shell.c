@@ -33,6 +33,13 @@ static struct context {
     ev_io stdin_watcher;
 } ctx;
 
+static int cmd_exit(int argc, char *argv[])
+{
+    ev_break(ctx.loop, EVBREAK_ALL);
+    rl_callback_handler_remove();
+    return 0;
+}
+
 static int cmd_help(int argc, char *argv[])
 {
     int i=0;
@@ -49,7 +56,7 @@ static int cmd_help(int argc, char *argv[])
             shell_printf("\t%-40s %s\n", cmd_list[i].name, cmd_list[i].doc);
         }
     }
-    shell_printf("Exit by Ctrl+D.\n");
+    // shell_printf("Exit by Ctrl+D.\n");
     return 0;
 }
 
@@ -70,6 +77,7 @@ static command_t cmd_list[] = {
     { "usb_hid_write <index> <data1 data2 ...>", cmd_usb_hid_write, "Send hex data by usbhid" },
     { "io", cmd_io, "Memory accesses via /dev/mem" },
     { "help", cmd_help, "Disply help info" },
+    { "exit", cmd_exit, "Exit" },
     { NULL, NULL, NULL},
 };
 
