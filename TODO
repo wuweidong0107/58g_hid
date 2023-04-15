@@ -13,5 +13,7 @@
 - cpufreq;
 - mmio;
 - led;
+- input;
 - udev 检测提取为公共组件;
 - 多个模块可共用同一个串口，例如在 /dev/ttyS1 上，既要解析MCU 控台数据，又要解析 DSP 数据。
+- 集成 getevent

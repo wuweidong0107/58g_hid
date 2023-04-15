@@ -42,16 +42,17 @@ static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
     }
 }
 
-static void show_help(void)
+static void help(void)
 {
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "    devctl <-c config_file> [-l config file] <-m mode> [-r command]\n");
     fprintf(stderr, "       --config <filename>   Specify config file.\n");
     fprintf(stderr, "       --log <filename>      Log to file.\n");
-    fprintf(stderr, "       --mode <mode>         Select run mode. 0: normal, 1: shell, 2: server\n");
+    fprintf(stderr, "       --mode <mode>         Select work mode. 0: cmd, 1: shell, 2: server\n");
     fprintf(stderr, "       --run <command>       Specify command in normal mode\n");
+    fprintf(stderr, "       --quiet               Qiut mode less log\n");
     fprintf(stderr, "    exmaple:\n");
-    fprintf(stderr, "       devctl -c ./conf.d/devctl.conf -m 0 -r io\n");
+    fprintf(stderr, "       devctl -c ./conf.d/devctl.conf -q -m cmd -r io\n");
 }
 
 int main(int argc, char *argv[])
@@ -62,6 +63,11 @@ int main(int argc, char *argv[])
     char *command = NULL;
     int mode = -1;
     int log_level = LOG_INFO;
+
+    if (argc == 1) {
+        help();
+        exit(1);
+    }
 
     struct option long_options[] = {
         {"config", required_argument, 0, 'c'},
@@ -81,13 +87,22 @@ int main(int argc, char *argv[])
                 log_file = optarg;
                 break;
             case 'm':
-                mode = atoi(optarg);
+                if (!strncmp(optarg, "cmd", strlen("cmd"))) {
+                    mode = MODE_COMMAND;
+                } else if (!strncmp(optarg, "shell", strlen("shell"))) {
+                    mode = MODE_SHELL;
+                } else if (!strncmp(optarg, "shell", strlen("shell"))) {
+                    mode = MODE_SERVER;
+                } else {
+                    fprintf(stderr, "unknown work mode\n");
+                    exit(1);
+                }
                 break;
             case 'q':
                 log_level = LOG_WARN;
                 break;
             case 'h':
-                show_help();
+                help();
                 return 0;
             case 'r':
                 command = optarg;
@@ -97,9 +112,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (mode == -1 \
-        || (mode == MODE_NORMAL && command == NULL)) {
-        show_help();
+    if ((mode == MODE_COMMAND && command == NULL)) {
+        help();
         exit(1);
     }
 
@@ -129,7 +143,7 @@ int main(int argc, char *argv[])
 
     /* real work */    
     switch(mode) {
-        case MODE_NORMAL:
+        case MODE_COMMAND:
             /* run a command */
             shell_init(loop, argc - optind, argv + optind, mode);
             shell_exec(command);
