@@ -2,7 +2,8 @@
 #define __DEVCTL_h__
 
 enum run_mode {
-    MODE_COMMAND = 0,
+    MODE_UNKNOWN = -1,
+    MODE_COMMAND,
     MODE_SHELL,
     MODE_SERVER,
 };

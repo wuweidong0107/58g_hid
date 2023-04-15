@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
     char *log_file = NULL;
     char *conf_file = "/etc/devctl.conf";
     char *command = NULL;
-    int mode = -1;
+    int mode = MODE_UNKNOWN;
     int log_level = LOG_INFO;
 
     if (argc == 1) {
@@ -112,7 +112,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    if ((mode == MODE_COMMAND && command == NULL)) {
+    if (mode == MODE_UNKNOWN ||
+        (mode == MODE_COMMAND && command == NULL)) {
         help();
         exit(1);
     }
