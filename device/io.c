@@ -132,12 +132,8 @@ int cmd_io(int argc, char *argv[])
         return -1;
     }
 
-int i;
-for(i=0; i<argc; i++)
-    printf("-%d: %s\n", i, argv[i]);
-
+    optind = 1;
     while ((opt = getopt(argc, argv, "hv124rwl:f:")) > 0) {
-        printf("opt:%c\n", opt);
         switch (opt) {
         case 'h':
             usage();

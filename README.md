@@ -9,7 +9,7 @@ $ libev libusb libreadline
 # Usage
 example:
 ```
-[root@MSK28:/]# devctl -c /etc/devctl.conf  -q -m cmd -r "io"
+[root@RK3328:/]# devctl -c /etc/devctl.conf  -q -m cmd -r "io"
 Raw memory i/o utility - $Revision: 1.5 $
 
 io -v -1|2|4 -r|w [-l <len>] [-f <file>] <addr> [<value>]
@@ -32,6 +32,9 @@ Examples:
     io -w -f img 0x10000       Writes the whole of file to memory
 
 Note access size (-1|2|4) does not apply to file based accesses.
+
+[root@RK3328:/]# devctl -q -m cmd -r "io -4 -r 0xFF190000"
+ff190000:  00000000
 ```
 
 访问 server:
