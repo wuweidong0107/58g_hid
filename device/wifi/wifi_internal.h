@@ -9,6 +9,7 @@ typedef struct wifi_backend
 {
     void* (*init)(void);
     void (*free)(void *handle);
+    bool (*is_available)(void *handle);
     bool (*enable)(void *handle, bool enabled);
     bool (*connection_info)(void *handle, wifi_network_info_t *network);
     void (*scan)(void *handle);

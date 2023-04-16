@@ -61,7 +61,8 @@ static int cmd_help(int argc, char *argv[])
 }
 
 static command_t cmd_list[] = {
-    { "aw5808", cmd_aw5808, "control aw5808 device" },
+    { "aw5808", cmd_aw5808, "control aw5808" },
+    { "wifi", cmd_wifi, "control wifi" },
     { "aw5808_list", cmd_aw5808_list, "List available aw5808 device" },
     { "aw5808_getconfig [index]", cmd_aw5808_get_config, "Get aw5808 config" },
     { "aw5808_getrfstatus [index]", cmd_aw5808_get_rfstatus, "Get aw5808 RF status" },

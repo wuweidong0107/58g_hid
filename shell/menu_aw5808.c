@@ -2,7 +2,6 @@
 #include <errno.h>
 #include "log.h"
 #include "shell.h"
-#include "aw5808.h"
 #include "device.h"
 
 static aw5808_t *current = NULL;
@@ -322,10 +321,6 @@ static struct aw5808_client menu_aw5808 = {
 int cmd_aw5808(int argc, char *argv[])
 {
     int i;
-
-    for(i=0; i<argc; i++) {
-        printf("%d: %s\n", i, argv[i]);
-    }
 
     if (argc < 3) {
         help();

@@ -92,13 +92,19 @@ int wifi_open(wifi_t *wifi, const char *backend)
 {
     int i;
 
-    if (backend == NULL)
-        return _wifi_error(wifi, WIFI_ERROR_OPEN, 0, "WiFi backend param invalid");
-
-    for(i=0; wifi_backends[i]; i++) {
-        if (!strncmp(backend, wifi_backends[i]->ident, strlen(backend))) {
-            wifi->backend = wifi_backends[i];
-            break;
+    if (backend == NULL) {
+        for (i=0; wifi_backends[i] != NULL; i++) {
+            if (wifi_backends[i]->is_available && wifi_backends[i]->is_available(wifi)) {
+                wifi->backend = wifi_backends[i];
+                break;
+            }
+        }
+    } else {
+        for(i=0; wifi_backends[i]; i++) {
+            if (!strncmp(backend, wifi_backends[i]->ident, strlen(backend))) {
+                wifi->backend = wifi_backends[i];
+                break;
+            }
         }
     }
     if (wifi->backend == NULL)

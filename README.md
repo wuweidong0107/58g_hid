@@ -7,8 +7,8 @@ $ libev libusb libreadline
 ```
 
 # Usage
-example:
-```
+**example1: io**
+```Bash
 [root@RK3328:/]# devctl -c /etc/devctl.conf  -q -m cmd -r "io"
 Raw memory i/o utility - $Revision: 1.5 $
 

@@ -50,9 +50,9 @@ bool nmcli_enable(void __attribute__((unused)) *handle, bool enabled)
     int ret;
 
     if (enabled)
-        pclose(popen("nmcli radio wifi on", "r"));
+        ret = pclose(popen("nmcli radio wifi on", "r"));
     else
-        pclose(popen("nmcli radio wifi off", "r"));
+        ret = pclose(popen("nmcli radio wifi off", "r"));
     
     if (WIFEXITED(ret) != 1 || WEXITSTATUS(ret) != 0)
         return false;
@@ -60,25 +60,43 @@ bool nmcli_enable(void __attribute__((unused)) *handle, bool enabled)
         return true;
 }
 
+bool nmcli_is_available(void __attribute__((unused)) *handle)
+{
+    FILE *fp = NULL;
+    int ret;
+    char line[512];
+
+    fp = popen("pidof NetworkManager", "r");
+    while (fgets(line, 512, fp)) {} // avoid SIGPIPE
+    ret = pclose(fp);
+    if (WIFEXITED(ret) != 1 || WEXITSTATUS(ret) != 0) {
+        return false;
+    } else {
+        return true;
+    }
+
+}
+
 static bool nmcli_connection_info(void __attribute__((unused)) *handle, wifi_network_info_t *network)
 {
-    FILE *cmd_file = NULL;
+    FILE *fp = NULL;
     char line[512];
 
     if (!network)
         return false;
 
-    cmd_file = popen("nmcli -f NAME,TYPE c show --active | tail -n+2", "r");
-    if (fgets(line, sizeof(line), cmd_file)) {
+    fp = popen("nmcli -f NAME,TYPE c show --active | tail -n+2", "r");
+    if (fgets(line, sizeof(line), fp)) {
         if(string_ends_with(string_trim(line), "wifi")) {
             char *rest = line;
             char *ssid = strtok_r(rest, " ", &rest);
             memset(network->ssid, 0, sizeof(network->ssid));
             strncpy(network->ssid, ssid, sizeof(network->ssid)-1);
+            pclose(fp);
             return true;
         }
     }
-
+    pclose(fp);
     return false;
 }
 
@@ -86,13 +104,13 @@ void nmcli_scan(void *handle)
 {
     nmcli_t *nmcli = (nmcli_t *)handle;
     char line[512];
-    FILE *cmd_file = NULL;
+    FILE *fp = NULL;
 
     /* Clean up */
     free_wifi_network(nmcli);
 
-    cmd_file = popen("nmcli -f IN-USE,SSID,SIGNAL dev wifi | tail -n+2", "r");
-    while (fgets(line, 512, cmd_file)) {
+    fp = popen("nmcli -f IN-USE,SSID,SIGNAL dev wifi | tail -n+2", "r");
+    while (fgets(line, 512, fp)) {
         wifi_network_info_t *network = calloc(1, sizeof(wifi_network_info_t));
         string_trim(line);
         if (line[0] == '\0')
@@ -114,7 +132,7 @@ void nmcli_scan(void *handle)
             free(tokens[i]);
         list_add_tail(&network->list, &nmcli->wifi_network);
     }
-    pclose(cmd_file);
+    pclose(fp);
 }
 
 bool nmcli_connect_ssid(void *handle, wifi_network_info_t *network)
@@ -122,7 +140,7 @@ bool nmcli_connect_ssid(void *handle, wifi_network_info_t *network)
     nmcli_t *nmcli = (nmcli_t *)handle;
     char cmd[256];
     char line[512];
-    FILE *cmd_file = NULL;
+    FILE *fp = NULL;
 
     if (!nmcli || !network)
         return false;
@@ -131,18 +149,19 @@ bool nmcli_connect_ssid(void *handle, wifi_network_info_t *network)
         "nmcli dev wifi connect \"%s\" password \"%s\" 2>&1", network->ssid, network->password);
     pclose(popen(cmd, "r"));
 
-    cmd_file = popen("nmcli -f IN-USE,SSID dev wifi | tail -n+2", "r");
-    while (fgets(line, 512, cmd_file)) {
+    fp = popen("nmcli -f IN-USE,SSID dev wifi | tail -n+2", "r");
+    while (fgets(line, 512, fp)) {
         string_trim(line);
         if (string_starts_with(line, "*")) {
             line[0] = ' ';
             if (!strncmp(string_trim(line), network->ssid, sizeof(line))) {
                 network->connected = true;
+		 pclose(fp);
                 return true;
             }
         }
     }
-    pclose(cmd_file);
+    pclose(fp);
 
     return false;
 }
@@ -164,6 +183,7 @@ bool nmcli_disconnect_ssid(void __attribute__((unused)) *handle, wifi_network_in
 wifi_backend_t wifi_nmcli = {
     .init = nmcli_init,
     .free = nmcli_free,
+    .is_available = nmcli_is_available,
     .enable = nmcli_enable,
     .connection_info = nmcli_connection_info,
     .scan = nmcli_scan,

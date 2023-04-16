@@ -9,6 +9,8 @@ extern int usb_shell_init(void);
 extern int usb_shell_exit(void);
 
 extern int cmd_aw5808(int argc, char *argv[]);
+extern int cmd_wifi(int argc, char *argv[]);
+
 extern int cmd_aw5808_list(int argc, char *argv[]);
 extern int cmd_aw5808_get_config(int argc, char *argv[]);
 extern int cmd_aw5808_get_rfstatus(int argc, char *argv[]);
