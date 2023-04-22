@@ -103,7 +103,7 @@ subprocess_stderr(const struct subprocess *const process);
 ///
 /// Joining a process will close the stdin pipe to the process.
 subprocess_weak int subprocess_join(struct subprocess *const process,
-                                    int *const out_return_code);
+                                    int timeout_ms, int *const out_return_code);
 
 /// @brief Destroy a previously created process.
 /// @param process The process to destroy.
@@ -317,9 +317,10 @@ FILE *subprocess_stderr(const struct subprocess *const process)
 }
 
 int subprocess_join(struct subprocess *const process,
-                    int *const out_return_code)
+                    int timeout_ms, int *const out_return_code)
 {
     int status;
+    int poll_ms = 1, w;
 
     if (process->stdin_file) {
         fclose(process->stdin_file);
@@ -327,10 +328,23 @@ int subprocess_join(struct subprocess *const process,
     }
 
     if (process->child) {
-        if (process->child != waitpid(process->child, &status, 0)) {
-            return -1;
+        if (timeout_ms > 0) {
+            do {
+                w = waitpid(process->child, &status, WNOHANG);
+                if (w == 0 ) {
+                    usleep(poll_ms*1000);
+                    timeout_ms -= poll_ms;
+                } else if (w > 0){
+                    break;
+                } else if (w == -1) {
+                    return -1;
+                }
+            } while (timeout_ms > 0);            
+        } else {
+            if (process->child != waitpid(process->child, &status, 0)) {
+                return -1;
+            }
         }
-
         process->child = 0;
 
         if (WIFEXITED(status)) {
@@ -427,7 +441,7 @@ int subprocess_alive(struct subprocess *const process)
         // the child now.
         process->child = 0;
 
-        if (subprocess_join(process, SUBPROCESS_NULL)) {
+        if (subprocess_join(process, 0, SUBPROCESS_NULL)) {
             return -1;
         }
     }
